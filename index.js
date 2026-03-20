@@ -59,6 +59,28 @@ jQuery(async () => {
         return TAG_COLORS[hashStr(tagName) % TAG_COLORS.length];
     }
 
+    // ===== 服务器头像列表缓存（分页下 DOM 不完整，需用服务器列表作权威来源） =====
+    let serverAvatarSet = null;
+
+    async function refreshServerAvatars() {
+        try {
+            const ctx = SillyTavern.getContext();
+            const response = await fetch('/api/avatars/get', {
+                method: 'POST',
+                headers: ctx.getRequestHeaders(),
+            });
+            if (response.ok) {
+                const list = await response.json();
+                if (Array.isArray(list)) {
+                    serverAvatarSet = new Set(list);
+                    console.log(LOG, 'Server avatar cache refreshed:', serverAvatarSet.size, 'avatars');
+                }
+            }
+        } catch (e) {
+            console.error(LOG, 'Failed to fetch avatar list:', e);
+        }
+    }
+
     // ===== 标签数据操作 =====
     function getPersonaTags(avatarId) {
         return getSettings().tagMap[avatarId] || [];
@@ -84,7 +106,56 @@ jQuery(async () => {
         setPersonaTags(avatarId, tags);
     }
 
+    /** 清理 tagMap 中已不存在的人设条目（高频调用，只动插件自身数据） */
+    function purgeOrphanedEntries() {
+        const settings = getSettings();
+        const ctx = SillyTavern.getContext();
+        const personas = ctx.powerUserSettings?.personas;
+        if (!serverAvatarSet && (!personas || Object.keys(personas).length === 0)) return;
+
+        let changed = false;
+        for (const avatarId of Object.keys(settings.tagMap)) {
+            // 在服务器列表中 OR 在 personas 中 → 有效（兼容新建但缓存未刷新的情况）
+            // 孤儿条目（已删但 personas 未清理）由 purgeOrphanedSTEntries 先清掉 personas，
+            // 之后这里自然也会清掉 tagMap
+            const inServer = serverAvatarSet && serverAvatarSet.has(avatarId);
+            const inPersonas = personas && (avatarId in personas);
+            if (!inServer && !inPersonas) {
+                console.log(LOG, 'Purging orphaned tagMap entry:', avatarId);
+                delete settings.tagMap[avatarId];
+                changed = true;
+            }
+        }
+        if (changed) saveSettings();
+    }
+
+    /**
+     * 清理 ST 自身的孤儿 persona 记录（仅在 refreshServerAvatars 之后调用，缓存保证是新鲜的）
+     * ST 删除人设后不一定清理 personas/persona_descriptions，这里替它补上
+     */
+    function purgeOrphanedSTEntries() {
+        if (!serverAvatarSet) return;
+        const ctx = SillyTavern.getContext();
+        const personas = ctx.powerUserSettings?.personas;
+        if (!personas) return;
+
+        const descriptions = ctx.powerUserSettings?.persona_descriptions;
+        let changed = false;
+        for (const avatarId of Object.keys(personas)) {
+            if (!serverAvatarSet.has(avatarId)) {
+                console.log(LOG, 'Purging orphaned ST persona entry:', avatarId);
+                delete personas[avatarId];
+                if (descriptions && avatarId in descriptions) {
+                    delete descriptions[avatarId];
+                }
+                changed = true;
+            }
+        }
+        if (changed) saveSettings();
+    }
+
     function getAllTags() {
+        purgeOrphanedEntries();
         const allTags = new Set();
         for (const tags of Object.values(getSettings().tagMap)) {
             for (const tag of tags) {
@@ -312,6 +383,10 @@ jQuery(async () => {
 
     function renderFilterArea() {
         const allTags = getAllTags();
+        // 清除 activeFilters 中已不存在的 tag（防止幽灵筛选）
+        for (const f of [...activeFilters]) {
+            if (!allTags.includes(f)) activeFilters.delete(f);
+        }
         let $area = $('#persona-tags-filter-area');
 
         if (allTags.length === 0) {
@@ -522,10 +597,12 @@ jQuery(async () => {
     }
 
     // ===== 初始化 =====
-    function init() {
+    async function init() {
         console.log(LOG, 'Initializing...');
 
         getSettings();
+        await refreshServerAvatars();
+        purgeOrphanedSTEntries();
         injectTagEditor();
         injectViewModeToggle();
         renderFilterArea();
@@ -549,17 +626,51 @@ jQuery(async () => {
         });
 
         // MutationObserver：人设列表重新渲染时重新应用
+        let mutationDebounceTimer = null;
         const block = document.getElementById('user_avatar_block');
         if (block) {
             new MutationObserver(() => {
                 renderCardTags();
                 applyDomFilter();
+                // 防抖刷新筛选区（DOM 重新渲染会触发多次 mutation）
+                if (mutationDebounceTimer) clearTimeout(mutationDebounceTimer);
+                mutationDebounceTimer = setTimeout(() => {
+                    renderFilterArea();
+                }, 200);
             }).observe(block, { childList: true });
         }
 
+        // 监听人设删除按钮：ST 删除后主动刷新缓存 + 清理
+        let deleteCleanupTimer = null;
+        $(document).on('click', '#persona_delete_button', () => {
+            // ST 会先弹确认框，确认后异步删除 + 重新渲染
+            // 延迟足够久以确保 ST 的删除流程完成（服务器删文件 + 重新渲染列表）
+            if (deleteCleanupTimer) clearTimeout(deleteCleanupTimer);
+            deleteCleanupTimer = setTimeout(async () => {
+                await refreshServerAvatars();
+                purgeOrphanedSTEntries();
+                // ST 连续删除时可能不重新渲染 DOM，手动移除已删除的卡片
+                if (serverAvatarSet) {
+                    $('#user_avatar_block .avatar-container').each(function () {
+                        const avatarId = $(this).attr('data-avatar-id');
+                        if (avatarId && !serverAvatarSet.has(avatarId)) {
+                            $(this).remove();
+                        }
+                    });
+                }
+                renderFilterArea();
+                applyDomFilter();
+                const cur = detectCurrentPersona();
+                renderTagEditor(cur);
+                console.log(LOG, 'Post-delete cleanup done');
+            }, 2000);
+        });
+
         // 抽屉打开时重新注入
         $(document).on('click', '#persona-management-button .drawer-toggle', () => {
-            setTimeout(() => {
+            setTimeout(async () => {
+                await refreshServerAvatars();
+                purgeOrphanedSTEntries();
                 if (!$('#persona-tags-editor-section').length) {
                     injectTagEditor();
                 }
@@ -577,5 +688,5 @@ jQuery(async () => {
         console.log(LOG, 'Initialized!');
     }
 
-    init();
+    await init();
 });
