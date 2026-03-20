@@ -1,0 +1,344 @@
+/* ===== Persona Tags Extension ===== */
+
+/* --- Right Column: Tag Editor --- */
+.persona-tags-section {
+    margin: 10px 0;
+    padding: 8px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+    background: var(--SmartThemeBlurTintColor);
+}
+
+.persona-tags-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: bold;
+    margin-bottom: 6px;
+    font-size: 0.9em;
+    color: var(--SmartThemeBodyColor);
+}
+
+.persona-tags-header i {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.persona-tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+    min-height: 24px;
+}
+
+.persona-tag-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.85em;
+    cursor: default;
+    line-height: 1.4;
+}
+
+.persona-tag-remove {
+    cursor: pointer;
+    font-weight: bold;
+    margin-left: 2px;
+    opacity: 0.6;
+    font-size: 1.1em;
+    line-height: 1;
+}
+
+.persona-tag-remove:hover {
+    opacity: 1;
+}
+
+#persona-tag-input {
+    margin-top: 2px;
+    font-size: 0.85em;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.persona-tags-empty {
+    font-size: 0.8em;
+    opacity: 0.5;
+    font-style: italic;
+    padding: 2px 0;
+}
+
+/* --- Left Column: Tag Filter Dropdown --- */
+.persona-tags-filter-area {
+    margin: 3px 0;
+    padding: 0 2px;
+    position: relative;
+}
+
+.persona-filter-dropdown-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    border: 1px solid var(--SmartThemeBorderColor);
+    color: var(--SmartThemeBodyColor);
+    background: var(--SmartThemeBlurTintColor);
+    user-select: none;
+    transition: opacity 0.2s;
+}
+
+.persona-filter-dropdown-toggle:hover {
+    opacity: 0.85;
+}
+
+.persona-filter-dropdown-toggle .filter-count {
+    background: var(--SmartThemeBodyColor);
+    color: var(--SmartThemeBlurTintColor);
+    border-radius: 50%;
+    min-width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85em;
+    font-weight: bold;
+}
+
+.persona-filter-selected-pills {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-left: 4px;
+    align-items: center;
+}
+
+.persona-filter-selected-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 7px;
+    border-radius: 8px;
+    font-size: 0.75em;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.persona-filter-selected-pill:hover {
+    opacity: 0.7;
+}
+
+.persona-filter-dropdown-panel {
+    display: none;
+    margin-top: 4px;
+    padding: 6px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background: var(--SmartThemeBlurTintColor);
+}
+
+.persona-filter-dropdown-panel.open {
+    display: block;
+}
+
+.persona-filter-dropdown-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+}
+
+.persona-tag-filter-btn {
+    cursor: pointer;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    transition: all 0.15s;
+    opacity: 0.45;
+    user-select: none;
+    border: 2px solid transparent;
+}
+
+.persona-tag-filter-btn:hover {
+    opacity: 0.75;
+}
+
+.persona-tag-filter-btn.active {
+    opacity: 1;
+    border-color: var(--SmartThemeBodyColor);
+    transform: scale(1.08);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+.persona-tag-filter-btn.active::before {
+    content: "\f00c  ";
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    font-size: 0.75em;
+}
+
+.persona-tag-clear-btn {
+    cursor: pointer;
+    padding: 3px 8px;
+    font-size: 0.8em;
+    opacity: 0.5;
+    color: var(--SmartThemeBodyColor);
+    transition: opacity 0.2s;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+}
+
+.persona-tag-clear-btn:hover {
+    opacity: 1;
+}
+
+/* --- View Mode Toggle Bar --- */
+.persona-view-mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 6px 0 2px;
+    padding: 0 2px;
+}
+
+.persona-view-mode-btn {
+    cursor: pointer;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    border: 1px solid var(--SmartThemeBorderColor);
+    color: var(--SmartThemeBodyColor);
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    user-select: none;
+}
+
+.persona-view-mode-btn:hover {
+    opacity: 0.8;
+}
+
+.persona-view-mode-btn.active {
+    opacity: 1;
+    background: var(--SmartThemeBlurTintColor);
+    border-color: var(--SmartThemeBodyColor);
+}
+
+.persona-view-mode-info {
+    font-size: 0.75em;
+    opacity: 0.6;
+    margin-left: 4px;
+    color: var(--SmartThemeBodyColor);
+}
+
+/* --- DOM-based filter: hide non-matching personas --- */
+.persona-tag-hidden {
+    display: none !important;
+}
+
+/* --- Card-level tag display (on each persona card in the list) --- */
+.persona-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 3px;
+    align-self: flex-start;
+}
+
+.persona-card-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 0.72em;
+    line-height: 1.4;
+    white-space: nowrap;
+    opacity: 0.85;
+    flex-shrink: 0;
+    height: fit-content;
+}
+
+/* --- Persona Selection Popup Enhancement --- */
+.persona-popup-enhanced.persona-list {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    justify-content: center !important;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.persona-popup-enhanced .avatar[data-type="persona"] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 120px !important;
+    height: auto !important;
+    min-height: unset !important;
+    max-height: unset !important;
+    overflow: visible !important;
+    padding: 8px 4px !important;
+    border: 1px solid var(--SmartThemeBorderColor, #555) !important;
+    border-radius: 8px !important;
+    background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.1)) !important;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.persona-popup-enhanced .avatar[data-type="persona"]:hover {
+    border-color: var(--SmartThemeBodyColor, #fff) !important;
+    box-shadow: 0 0 8px rgba(255,255,255,0.2);
+}
+
+.persona-popup-enhanced .avatar[data-type="persona"] img {
+    width: 64px !important;
+    height: 64px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    flex-shrink: 0;
+}
+
+.persona-popup-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    margin-top: 5px;
+    width: 100%;
+    overflow: visible;
+}
+
+.persona-popup-name {
+    font-size: 0.82em;
+    font-weight: bold;
+    text-align: center;
+    word-break: break-word;
+    line-height: 1.3;
+}
+
+.persona-popup-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    justify-content: center;
+}
+
+.persona-popup-tag {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 6px;
+    font-size: 0.68em;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+/* --- jQuery UI Autocomplete overrides --- */
+.persona-tag-autocomplete.ui-autocomplete {
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 99999;
+}
