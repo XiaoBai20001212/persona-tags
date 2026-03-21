@@ -514,6 +514,81 @@ jQuery(async () => {
         });
     }
 
+    // ===== 复制人设标签增强 =====
+    let pendingDuplication = null;
+
+    function enhanceDuplicateDialog(dialog) {
+        dialog.classList.add('persona-dupe-modified');
+
+        // 汉化弹窗文字
+        const contentEl = dialog.querySelector('.popup-content');
+        if (contentEl) {
+            contentEl.querySelectorAll('h3').forEach(h => {
+                if (h.textContent.includes('duplicate this persona')) {
+                    h.textContent = '复制人设';
+                }
+            });
+            contentEl.querySelectorAll('p, span, div').forEach(el => {
+                if (el.children.length === 0 && el.textContent.trim() && !el.textContent.includes('复制人设')) {
+                    // 显示人设名称（保留原文本，它就是人设名）
+                }
+            });
+        }
+
+        const okBtn = dialog.querySelector('.popup-button-ok');
+        const cancelBtn = dialog.querySelector('.popup-button-cancel');
+
+        if (cancelBtn) cancelBtn.textContent = '取消';
+
+        if (okBtn) {
+            okBtn.style.display = 'none';
+
+            const controls = dialog.querySelector('.popup-controls');
+            if (controls) {
+                const withTagsBtn = document.createElement('div');
+                withTagsBtn.className = 'menu_button popup-button-custom result-control';
+                withTagsBtn.textContent = '带标签复制';
+                withTagsBtn.addEventListener('click', () => {
+                    if (pendingDuplication) pendingDuplication.copyTags = true;
+                    okBtn.click();
+                });
+
+                const withoutTagsBtn = document.createElement('div');
+                withoutTagsBtn.className = 'menu_button popup-button-custom result-control';
+                withoutTagsBtn.textContent = '不带标签复制';
+                withoutTagsBtn.addEventListener('click', () => {
+                    if (pendingDuplication) pendingDuplication.copyTags = false;
+                    okBtn.click();
+                });
+
+                controls.prepend(withoutTagsBtn);
+                controls.prepend(withTagsBtn);
+            }
+        }
+    }
+
+    function handlePendingDuplication() {
+        if (!pendingDuplication) return;
+
+        const ctx = SillyTavern.getContext();
+        const currentIds = new Set(Object.keys(ctx.powerUserSettings.personas));
+
+        // 找到新出现的人设 ID
+        for (const id of currentIds) {
+            if (!pendingDuplication.existingIds.has(id)) {
+                if (pendingDuplication.copyTags) {
+                    const sourceTags = getPersonaTags(pendingDuplication.sourceAvatarId);
+                    if (sourceTags.length > 0) {
+                        setPersonaTags(id, [...sourceTags]);
+                        console.log(LOG, 'Copied tags to duplicated persona:', id);
+                    }
+                }
+                pendingDuplication = null;
+                return;
+            }
+        }
+    }
+
     // ===== 人设选择弹窗增强 =====
     function enhancePersonaPopup(personaList) {
         if (!personaList || personaList.classList.contains('persona-popup-enhanced')) return;
@@ -581,6 +656,16 @@ jQuery(async () => {
                     enhancePersonaPopup(el);
                 }
             });
+
+            // 检测复制人设的确认弹窗并增强
+            if (pendingDuplication) {
+                document.querySelectorAll('dialog.popup:not(.persona-dupe-modified)').forEach(dialog => {
+                    const text = dialog.querySelector('.popup-content')?.textContent || '';
+                    if (text.includes('duplicate this persona')) {
+                        enhanceDuplicateDialog(dialog);
+                    }
+                });
+            }
         }).observe(document.body, { childList: true, subtree: true });
     }
 
@@ -613,11 +698,27 @@ jQuery(async () => {
             setTimeout(() => renderTagEditor(avatarId), 100);
         });
 
+        // 监听复制按钮：捕获阶段优先于 ST 的处理，确保 pendingDuplication 先被设置
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#persona_duplicate_button')) return;
+            const sourceAvatarId = detectCurrentPersona();
+            if (!sourceAvatarId) return;
+            const ctx = SillyTavern.getContext();
+            if (!ctx.powerUserSettings.personas[sourceAvatarId]) return;
+            pendingDuplication = {
+                sourceAvatarId,
+                copyTags: false,
+                existingIds: new Set(Object.keys(ctx.powerUserSettings.personas)),
+            };
+            console.log(LOG, 'Pending duplication set for:', sourceAvatarId);
+        }, true); // 捕获阶段
+
         // MutationObserver：人设列表重新渲染时重新应用
         let mutationDebounceTimer = null;
         const block = document.getElementById('user_avatar_block');
         if (block) {
             new MutationObserver(() => {
+                handlePendingDuplication();
                 renderCardTags();
                 applyDomFilter();
                 // 防抖刷新筛选区（DOM 重新渲染会触发多次 mutation）

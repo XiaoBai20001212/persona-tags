@@ -335,3 +335,13 @@
     white-space: nowrap;
 }
 
+/* --- Duplicate Persona Dialog Enhancement --- */
+dialog.popup.persona-dupe-modified .popup-button-custom {
+    cursor: pointer;
+    padding: 5px 16px;
+    border-radius: 5px;
+    font-size: 0.9em;
+    text-align: center;
+    min-width: 100px;
+}
+
