@@ -287,25 +287,27 @@ jQuery(async () => {
         $('#persona-tag-form').on('submit', function (e) {
             e.preventDefault();
             const $input = $('#persona-tag-input');
-            const val = $input.val().replace(/,/g, '').trim();
-            if (val && currentPersonaAvatar) {
-                if (addTagToPersona(currentPersonaAvatar, val)) {
-                    $input.val('');
-                    renderTagEditor(currentPersonaAvatar);
-                    renderFilterArea();
-                    renderCardTags();
+            const raw = $input.val().trim();
+            if (!raw || !currentPersonaAvatar) return;
+
+            const parts = raw.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+            let added = 0;
+            let duplicated = 0;
+            for (const tag of parts) {
+                if (addTagToPersona(currentPersonaAvatar, tag)) {
+                    added++;
                 } else {
-                    toastr.warning('标签已存在');
+                    duplicated++;
                 }
             }
-        });
-
-        // 逗号添加标签（桌面端快捷方式），加 isComposing 守卫防止中文输入法误触发
-        $('#persona-tag-input').on('keydown', function (e) {
-            if (e.isComposing || e.keyCode === 229) return;
-            if (e.key === ',') {
-                e.preventDefault();
-                $('#persona-tag-form').trigger('submit');
+            if (added > 0) {
+                $input.val('');
+                renderTagEditor(currentPersonaAvatar);
+                renderFilterArea();
+                renderCardTags();
+            }
+            if (duplicated > 0 && added === 0) {
+                toastr.warning('标签已存在');
             }
         });
 
