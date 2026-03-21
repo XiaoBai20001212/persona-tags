@@ -311,32 +311,6 @@ jQuery(async () => {
             }
         });
 
-        // jQuery UI Autocomplete（如果可用）
-        if ($.fn.autocomplete) {
-            $('#persona-tag-input').autocomplete({
-                source: function (request, response) {
-                    const existing = currentPersonaAvatar ? getPersonaTags(currentPersonaAvatar) : [];
-                    const all = getAllTags().filter(t => !existing.includes(t));
-                    const term = request.term.toLowerCase();
-                    response(all.filter(t => t.toLowerCase().includes(term)));
-                },
-                select: function (event, ui) {
-                    if (currentPersonaAvatar) {
-                        addTagToPersona(currentPersonaAvatar, ui.item.value);
-                        $(this).val('');
-                        renderTagEditor(currentPersonaAvatar);
-                        renderFilterArea();
-                        renderCardTags();
-                    }
-                    return false;
-                },
-                classes: { 'ui-autocomplete': 'persona-tag-autocomplete' },
-                minLength: 0,
-            });
-            $('#persona-tag-input').on('focus', function () {
-                $(this).autocomplete('search', '');
-            });
-        }
     }
 
     // ===== 视图模式切换（绑定 / 全部） =====

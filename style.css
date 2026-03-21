@@ -335,10 +335,3 @@
     white-space: nowrap;
 }
 
-/* --- jQuery UI Autocomplete overrides --- */
-.persona-tag-autocomplete.ui-autocomplete {
-    max-height: 200px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    z-index: 99999;
-}
