@@ -196,6 +196,28 @@
     opacity: 1;
 }
 
+.persona-filter-mode-btn {
+    cursor: pointer;
+    padding: 3px 8px;
+    font-size: 0.8em;
+    opacity: 0.5;
+    color: var(--SmartThemeBodyColor);
+    transition: opacity 0.2s, background 0.2s;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    user-select: none;
+}
+
+.persona-filter-mode-btn:hover {
+    opacity: 0.8;
+}
+
+.persona-filter-mode-btn.exclude {
+    opacity: 1;
+    background: rgba(231, 76, 60, 0.3);
+    border-color: #e74c3c;
+}
+
 /* --- View Mode Toggle Bar --- */
 .persona-view-mode-bar {
     display: flex;

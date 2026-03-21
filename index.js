@@ -367,6 +367,7 @@ jQuery(async () => {
 
     // ===== 标签筛选区（左栏，下拉框样式） =====
     let activeFilters = new Set();
+    let filterMode = 'include'; // 'include' 正向 | 'exclude' 反向
     let dropdownOpen = false;
 
     function renderFilterArea() {
@@ -422,6 +423,17 @@ jQuery(async () => {
             applyDomFilter();
         });
         $list.append($clear);
+
+        // 正向/反向切换按钮
+        const modeLabel = filterMode === 'include' ? '正' : '反';
+        const modeTitle = filterMode === 'include' ? '当前：正向筛选（只显示匹配标签）' : '当前：反向筛选（隐藏匹配标签）';
+        const $modeBtn = $(`<span class="persona-filter-mode-btn${filterMode === 'exclude' ? ' exclude' : ''}" title="${modeTitle}"><i class="fa-solid fa-arrows-rotate"></i> ${modeLabel}</span>`);
+        $modeBtn.on('click', () => {
+            filterMode = filterMode === 'include' ? 'exclude' : 'include';
+            renderFilterArea();
+            applyDomFilter();
+        });
+        $list.append($modeBtn);
 
         for (const tag of allTags) {
             const color = getTagColor(tag);
@@ -485,10 +497,16 @@ jQuery(async () => {
                 visible = connectedPersonas.includes(avatarId);
             }
 
-            // 第二层：标签筛选（AND 逻辑）
+            // 第二层：标签筛选
             if (visible && activeFilters.size > 0) {
                 const tags = getPersonaTags(avatarId);
-                visible = [...activeFilters].every(f => tags.includes(f));
+                if (filterMode === 'include') {
+                    // 正向：必须包含所有选中标签（AND）
+                    visible = [...activeFilters].every(f => tags.includes(f));
+                } else {
+                    // 反向：有任意一个选中标签就隐藏
+                    visible = ![...activeFilters].some(f => tags.includes(f));
+                }
             }
 
             $(this).toggleClass('persona-tag-hidden', !visible);
