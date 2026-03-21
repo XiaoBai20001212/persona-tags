@@ -273,27 +273,39 @@ jQuery(async () => {
                     <span>人设标签</span>
                 </div>
                 <div class="persona-tags-list"></div>
-                <input id="persona-tag-input" class="text_pole" type="text"
-                       placeholder="输入标签名，回车添加" autocomplete="off">
+                <form id="persona-tag-form" autocomplete="off">
+                    <input id="persona-tag-input" class="text_pole" type="text"
+                           placeholder="输入标签名，回车添加" enterkeyhint="done">
+                </form>
             </div>
         `;
         $target.after(html);
 
-        // 回车/逗号添加标签
-        $('#persona-tag-input').on('keydown', function (e) {
-            if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                const val = $(this).val().replace(/,/g, '').trim();
-                if (val && currentPersonaAvatar) {
-                    if (addTagToPersona(currentPersonaAvatar, val)) {
-                        $(this).val('');
-                        renderTagEditor(currentPersonaAvatar);
-                        renderFilterArea();
-                        renderCardTags();
-                    } else {
-                        toastr.warning('标签已存在');
-                    }
+        // 回车添加标签：通过 form submit 实现，兼容移动端虚拟键盘
+        // （移动端 Android 的 keydown 事件 e.key 返回 "Unidentified" 而非 "Enter"，
+        //   但 form submit 在所有平台都能正常触发）
+        $('#persona-tag-form').on('submit', function (e) {
+            e.preventDefault();
+            const $input = $('#persona-tag-input');
+            const val = $input.val().replace(/,/g, '').trim();
+            if (val && currentPersonaAvatar) {
+                if (addTagToPersona(currentPersonaAvatar, val)) {
+                    $input.val('');
+                    renderTagEditor(currentPersonaAvatar);
+                    renderFilterArea();
+                    renderCardTags();
+                } else {
+                    toastr.warning('标签已存在');
                 }
+            }
+        });
+
+        // 逗号添加标签（桌面端快捷方式），加 isComposing 守卫防止中文输入法误触发
+        $('#persona-tag-input').on('keydown', function (e) {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === ',') {
+                e.preventDefault();
+                $('#persona-tag-form').trigger('submit');
             }
         });
 
