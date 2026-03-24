@@ -162,7 +162,34 @@ jQuery(async () => {
                 allTags.add(tag);
             }
         }
-        return [...allTags].sort();
+        // 按自定义排序返回，同时清理已不存在的标签
+        const settings = getSettings();
+        const order = settings.tagOrder || [];
+        const result = [];
+        const cleanedOrder = [];
+        for (const t of order) {
+            if (allTags.has(t)) {
+                result.push(t);
+                cleanedOrder.push(t);
+                allTags.delete(t);
+            }
+        }
+        // 新标签追加到末尾
+        for (const t of [...allTags].sort()) {
+            result.push(t);
+            cleanedOrder.push(t);
+        }
+        // 如果 order 有变化（删除了旧标签或追加了新标签），同步保存
+        if (cleanedOrder.length !== order.length || cleanedOrder.some((t, i) => t !== order[i])) {
+            settings.tagOrder = cleanedOrder;
+            saveSettings();
+        }
+        return result;
+    }
+
+    function saveTagOrder(orderedTags) {
+        getSettings().tagOrder = orderedTags;
+        saveSettings();
     }
 
     // ===== 绑定关系查询 =====
@@ -435,15 +462,27 @@ jQuery(async () => {
         });
         $list.append($modeBtn);
 
+        // 收集当前角色绑定人设的标签，用于高亮
+        const connectedTags = new Set();
+        const connectedIds = getConnectedPersonas();
+        if (connectedIds) {
+            for (const id of connectedIds) {
+                for (const t of getPersonaTags(id)) connectedTags.add(t);
+            }
+        }
+
         for (const tag of allTags) {
             const color = getTagColor(tag);
             const isActive = activeFilters.has(tag);
+            const isConnected = connectedTags.has(tag);
             const $btn = $('<span class="persona-tag-filter-btn"></span>')
                 .toggleClass('active', isActive)
+                .toggleClass('connected-highlight', isConnected)
                 .css({ background: color.bg, color: color.fg })
                 .attr('data-tag', tag)
                 .text(tag);
             $btn.on('click', () => {
+                if (isDragging) return;
                 if (activeFilters.has(tag)) {
                     activeFilters.delete(tag);
                 } else {
@@ -457,6 +496,141 @@ jQuery(async () => {
 
         $panel.append($list);
         $area.append($panel);
+        initTagDrag($list[0]);
+    }
+
+    // ===== 标签拖拽排序 =====
+    let isDragging = false;
+    let dragState = null;
+
+    function initTagDrag(listEl) {
+        if (!listEl) return;
+        const tagBtns = listEl.querySelectorAll('.persona-tag-filter-btn');
+        tagBtns.forEach(btn => {
+            btn.addEventListener('pointerdown', onDragPointerDown);
+        });
+    }
+
+    function onDragPointerDown(e) {
+        if (isDragging) return;
+        const btn = e.currentTarget;
+        const tag = btn.getAttribute('data-tag');
+        if (!tag) return;
+
+        const longPressTimer = setTimeout(() => {
+            startDrag(btn, tag, e.clientX, e.clientY);
+        }, 400);
+
+        const cancelLongPress = () => {
+            clearTimeout(longPressTimer);
+            document.removeEventListener('pointermove', onEarlyMove);
+            document.removeEventListener('pointerup', cancelLongPress);
+            document.removeEventListener('pointercancel', cancelLongPress);
+        };
+
+        const onEarlyMove = (ev) => {
+            const dx = ev.clientX - e.clientX;
+            const dy = ev.clientY - e.clientY;
+            if (dx * dx + dy * dy > 64) cancelLongPress();
+        };
+
+        document.addEventListener('pointermove', onEarlyMove);
+        document.addEventListener('pointerup', cancelLongPress);
+        document.addEventListener('pointercancel', cancelLongPress);
+    }
+
+    function startDrag(btn, tag, startX, startY) {
+        isDragging = true;
+        btn.classList.add('persona-tag-dragging-source');
+
+        const rect = btn.getBoundingClientRect();
+        const ghost = btn.cloneNode(true);
+        ghost.className = 'persona-tag-filter-btn persona-tag-drag-ghost';
+        ghost.style.cssText = btn.style.cssText;
+        ghost.style.position = 'fixed';
+        ghost.style.left = rect.left + 'px';
+        ghost.style.top = rect.top + 'px';
+        ghost.style.width = rect.width + 'px';
+        ghost.style.zIndex = '99999';
+        ghost.style.pointerEvents = 'none';
+        document.body.appendChild(ghost);
+
+        const listEl = btn.closest('.persona-filter-dropdown-list');
+        const allBtns = [...listEl.querySelectorAll('.persona-tag-filter-btn')];
+        const tagNames = allBtns.map(b => b.getAttribute('data-tag'));
+        const sourceIndex = tagNames.indexOf(tag);
+
+        dragState = {
+            ghost, listEl, tag, sourceIndex, tagNames,
+            allBtns, currentDropIndex: sourceIndex,
+            offsetX: startX - rect.left,
+            offsetY: startY - rect.top,
+        };
+
+        document.addEventListener('pointermove', onDragMove);
+        document.addEventListener('pointerup', onDragEnd);
+        document.addEventListener('pointercancel', onDragEnd);
+
+        // 阻止手机滚动
+        document.addEventListener('touchmove', preventScroll, { passive: false });
+    }
+
+    function preventScroll(e) { e.preventDefault(); }
+
+    function onDragMove(e) {
+        if (!dragState) return;
+        const { ghost, allBtns, sourceIndex, offsetX, offsetY } = dragState;
+
+        ghost.style.left = (e.clientX - offsetX) + 'px';
+        ghost.style.top = (e.clientY - offsetY) + 'px';
+
+        // 用 elementFromPoint 检测指针下方的标签
+        ghost.style.display = 'none';
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        ghost.style.display = '';
+
+        const targetBtn = el?.closest('.persona-tag-filter-btn');
+        if (!targetBtn) return;
+        const idx = allBtns.indexOf(targetBtn);
+        if (idx === -1 || idx === sourceIndex) return;
+
+        const r = targetBtn.getBoundingClientRect();
+        const midX = r.left + r.width / 2;
+        const dropIndex = e.clientX < midX ? idx : idx + 1;
+
+        if (dropIndex !== dragState.currentDropIndex) {
+            dragState.currentDropIndex = dropIndex;
+            allBtns.forEach(b => b.classList.remove('persona-tag-drop-left', 'persona-tag-drop-right'));
+            if (e.clientX < midX) {
+                targetBtn.classList.add('persona-tag-drop-left');
+            } else {
+                targetBtn.classList.add('persona-tag-drop-right');
+            }
+        }
+    }
+
+    function onDragEnd() {
+        if (!dragState) return;
+        const { ghost, sourceIndex, currentDropIndex, tagNames } = dragState;
+
+        document.removeEventListener('pointermove', onDragMove);
+        document.removeEventListener('pointerup', onDragEnd);
+        document.removeEventListener('pointercancel', onDragEnd);
+        document.removeEventListener('touchmove', preventScroll);
+
+        ghost.remove();
+
+        if (sourceIndex !== currentDropIndex && currentDropIndex !== sourceIndex + 1) {
+            const moved = tagNames.splice(sourceIndex, 1)[0];
+            const insertAt = currentDropIndex > sourceIndex ? currentDropIndex - 1 : currentDropIndex;
+            tagNames.splice(insertAt, 0, moved);
+            saveTagOrder(tagNames);
+        }
+
+        dragState = null;
+        isDragging = false;
+        renderFilterArea();
+        applyDomFilter();
     }
 
     // ===== 在人设卡片上显示标签 =====
@@ -532,8 +706,10 @@ jQuery(async () => {
         });
     }
 
-    // ===== 复制人设标签增强 =====
+    // ===== 复制人设增强 =====
     let pendingDuplication = null;
+    let lastDupeCopyTags = false;
+    let lastDupeCopyConnections = false;
 
     function enhanceDuplicateDialog(dialog) {
         dialog.classList.add('persona-dupe-modified');
@@ -544,11 +720,6 @@ jQuery(async () => {
             contentEl.querySelectorAll('h3').forEach(h => {
                 if (h.textContent.includes('duplicate this persona')) {
                     h.textContent = '复制人设';
-                }
-            });
-            contentEl.querySelectorAll('p, span, div').forEach(el => {
-                if (el.children.length === 0 && el.textContent.trim() && !el.textContent.includes('复制人设')) {
-                    // 显示人设名称（保留原文本，它就是人设名）
                 }
             });
         }
@@ -563,24 +734,47 @@ jQuery(async () => {
 
             const controls = dialog.querySelector('.popup-controls');
             if (controls) {
-                const withTagsBtn = document.createElement('div');
-                withTagsBtn.className = 'menu_button popup-button-custom result-control';
-                withTagsBtn.textContent = '带标签复制';
-                withTagsBtn.addEventListener('click', () => {
-                    if (pendingDuplication) pendingDuplication.copyTags = true;
+                // 勾选区
+                const optionsDiv = document.createElement('div');
+                optionsDiv.className = 'persona-dupe-options';
+
+                const tagLabel = document.createElement('label');
+                tagLabel.className = 'persona-dupe-checkbox';
+                const tagCheck = document.createElement('input');
+                tagCheck.type = 'checkbox';
+                tagCheck.checked = lastDupeCopyTags;
+                tagLabel.append(tagCheck, ' 复制标签');
+
+                const connLabel = document.createElement('label');
+                connLabel.className = 'persona-dupe-checkbox';
+                const connCheck = document.createElement('input');
+                connCheck.type = 'checkbox';
+                connCheck.checked = lastDupeCopyConnections;
+                connLabel.append(connCheck, ' 复制绑定关系');
+
+                optionsDiv.append(tagLabel, connLabel);
+
+                // 插入到弹窗内容区底部
+                const popupContent = dialog.querySelector('.popup-content');
+                if (popupContent) {
+                    popupContent.appendChild(optionsDiv);
+                }
+
+                // 复制按钮
+                const confirmBtn = document.createElement('div');
+                confirmBtn.className = 'menu_button popup-button-custom result-control';
+                confirmBtn.textContent = '复制';
+                confirmBtn.addEventListener('click', () => {
+                    lastDupeCopyTags = tagCheck.checked;
+                    lastDupeCopyConnections = connCheck.checked;
+                    if (pendingDuplication) {
+                        pendingDuplication.copyTags = tagCheck.checked;
+                        pendingDuplication.copyConnections = connCheck.checked;
+                    }
                     okBtn.click();
                 });
 
-                const withoutTagsBtn = document.createElement('div');
-                withoutTagsBtn.className = 'menu_button popup-button-custom result-control';
-                withoutTagsBtn.textContent = '不带标签复制';
-                withoutTagsBtn.addEventListener('click', () => {
-                    if (pendingDuplication) pendingDuplication.copyTags = false;
-                    okBtn.click();
-                });
-
-                controls.prepend(withoutTagsBtn);
-                controls.prepend(withTagsBtn);
+                controls.prepend(confirmBtn);
             }
         }
     }
@@ -599,6 +793,16 @@ jQuery(async () => {
                     if (sourceTags.length > 0) {
                         setPersonaTags(id, [...sourceTags]);
                         console.log(LOG, 'Copied tags to duplicated persona:', id);
+                    }
+                }
+                if (pendingDuplication.copyConnections) {
+                    const descriptions = ctx.powerUserSettings.persona_descriptions;
+                    const sourceConns = descriptions?.[pendingDuplication.sourceAvatarId]?.connections;
+                    if (sourceConns && sourceConns.length > 0) {
+                        if (!descriptions[id]) descriptions[id] = {};
+                        descriptions[id].connections = sourceConns.map(c => ({ ...c }));
+                        saveSettings();
+                        console.log(LOG, 'Copied connections to duplicated persona:', id);
                     }
                 }
                 pendingDuplication = null;
@@ -726,6 +930,7 @@ jQuery(async () => {
             pendingDuplication = {
                 sourceAvatarId,
                 copyTags: false,
+                copyConnections: false,
                 existingIds: new Set(Object.keys(ctx.powerUserSettings.personas)),
             };
             console.log(LOG, 'Pending duplication set for:', sourceAvatarId);
@@ -745,6 +950,19 @@ jQuery(async () => {
                     renderFilterArea();
                 }, 200);
             }).observe(block, { childList: true });
+        }
+
+        // MutationObserver：绑定关系列表变化时刷新筛选区高亮
+        let connectionDebounceTimer = null;
+        const connList = document.getElementById('persona_connections_list');
+        if (connList) {
+            new MutationObserver(() => {
+                if (connectionDebounceTimer) clearTimeout(connectionDebounceTimer);
+                connectionDebounceTimer = setTimeout(() => {
+                    renderFilterArea();
+                    updateViewModeInfo();
+                }, 200);
+            }).observe(connList, { childList: true, subtree: true });
         }
 
         // 监听人设删除按钮：ST 删除后主动刷新缓存 + 清理

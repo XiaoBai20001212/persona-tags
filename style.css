@@ -181,6 +181,39 @@
     font-size: 0.75em;
 }
 
+.persona-tag-filter-btn.connected-highlight {
+    opacity: 0.75;
+    box-shadow: 0 0 7px 2px rgba(255, 215, 0, 0.45);
+    border-color: rgba(255, 215, 0, 0.6);
+}
+
+/* --- Tag Drag & Drop --- */
+.persona-tag-filter-btn {
+    touch-action: none;
+}
+
+.persona-filter-dropdown-list .persona-tag-filter-btn {
+    transition: opacity 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.persona-tag-dragging-source {
+    opacity: 0.25 !important;
+}
+
+.persona-tag-drag-ghost {
+    opacity: 0.9 !important;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.persona-tag-drop-left {
+    box-shadow: -3px 0 0 0 #fff !important;
+}
+
+.persona-tag-drop-right {
+    box-shadow: 3px 0 0 0 #fff !important;
+}
+
 .persona-tag-clear-btn {
     cursor: pointer;
     padding: 3px 8px;
@@ -364,6 +397,33 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
     border-radius: 5px;
     font-size: 0.9em;
     text-align: center;
-    min-width: 100px;
+    min-width: 60px;
+    max-width: 80px;
+    background: rgba(100, 180, 255, 0.3);
+    border: 1px solid rgba(100, 180, 255, 0.5);
+}
+
+.persona-dupe-options {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 0;
+}
+
+.persona-dupe-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 0.9em;
+    user-select: none;
+}
+
+.persona-dupe-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
 }
 
