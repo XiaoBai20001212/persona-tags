@@ -461,6 +461,47 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
     outline-offset: -2px;
 }
 
+/* --- Position Badge --- */
+.persona-position-badge {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    z-index: 5;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-size: 0.68em;
+    padding: 1px 5px;
+    border-radius: 6px;
+    pointer-events: none;
+    line-height: 1.4;
+}
+
+/* --- Position Editor (Right Column) --- */
+.persona-position-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.persona-position-label {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.persona-position-input {
+    width: 50px !important;
+    text-align: center;
+    font-size: 0.85em !important;
+    padding: 2px 4px !important;
+}
+
+#persona-position-current {
+    font-size: 0.8em;
+    opacity: 0.6;
+    margin-left: auto;
+}
+
 /* --- Persona Card Drag & Drop --- */
 .persona-card-dragging-source {
     opacity: 0.25 !important;

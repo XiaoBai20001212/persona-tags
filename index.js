@@ -231,6 +231,38 @@ jQuery(async () => {
         saveSettings();
     }
 
+    function movePersonaToPosition(avatarId, targetIndex) {
+        const filtered = applyFilters(serverAvatarList);
+        const currentIndex = filtered.indexOf(avatarId);
+        if (currentIndex === -1) return;
+        targetIndex = Math.max(0, Math.min(targetIndex, filtered.length - 1));
+        if (currentIndex === targetIndex) { toastr.info('已在该位置'); return; }
+
+        // 计算新的可见顺序
+        const newVisible = [...filtered];
+        newVisible.splice(currentIndex, 1);
+        newVisible.splice(targetIndex, 0, avatarId);
+
+        // 合并回完整排序
+        const obj = ensurePersonaOrderObj();
+        const key = getOrderKey();
+        const fullOrder = obj[key] || [];
+        const visibleSet = new Set(filtered);
+        const merged = [];
+        let vi = 0;
+        for (const id of fullOrder) {
+            if (visibleSet.has(id)) merged.push(newVisible[vi++]);
+            else merged.push(id);
+        }
+        for (; vi < newVisible.length; vi++) merged.push(newVisible[vi]);
+        obj[key] = merged;
+        saveSettings();
+
+        applyFiltersAndRender();
+        renderTagEditor(avatarId);
+        toastr.success(`已移动到第 ${targetIndex + 1} 位`);
+    }
+
     function purgeOrphanedOrders() {
         const obj = ensurePersonaOrderObj();
         const ctx = SillyTavern.getContext();
@@ -326,6 +358,23 @@ jQuery(async () => {
     // ===== 标签编辑器 UI（右栏） =====
     function renderTagEditor(avatarId) {
         currentPersonaAvatar = avatarId;
+
+        // 更新位置编辑器
+        const $posEditor = $('#persona-position-editor');
+        if ($posEditor.length) {
+            if (avatarId) {
+                const filtered = applyFilters(serverAvatarList);
+                const pos = filtered.indexOf(avatarId);
+                $('#persona-position-current').text(pos >= 0 ? `当前 #${pos + 1}（共 ${filtered.length}）` : '');
+                $('#persona-position-input').val('').prop('disabled', false).attr('max', filtered.length);
+                $('#persona-position-go').removeClass('persona-batch-btn-disabled');
+            } else {
+                $('#persona-position-current').text('');
+                $('#persona-position-input').val('').prop('disabled', true);
+                $('#persona-position-go').addClass('persona-batch-btn-disabled');
+            }
+        }
+
         const $section = $('#persona-tags-editor-section');
         if (!$section.length) return;
 
@@ -369,6 +418,19 @@ jQuery(async () => {
         if (!$target.length) return;
 
         const html = `
+            <div id="persona-position-editor" class="persona-tags-section">
+                <div class="persona-tags-header">
+                    <i class="fa-solid fa-arrow-up-1-9"></i>
+                    <span>排序位置</span>
+                    <span id="persona-position-current"></span>
+                </div>
+                <div class="persona-position-controls">
+                    <span class="persona-position-label">移动到第</span>
+                    <input id="persona-position-input" class="text_pole persona-position-input" type="number" min="1" enterkeyhint="done">
+                    <span class="persona-position-label">位</span>
+                    <span id="persona-position-go" class="persona-batch-btn">移动</span>
+                </div>
+            </div>
             <div id="persona-tags-editor-section" class="persona-tags-section">
                 <div class="persona-tags-header">
                     <i class="fa-solid fa-tags"></i>
@@ -377,11 +439,23 @@ jQuery(async () => {
                 <div class="persona-tags-list"></div>
                 <form id="persona-tag-form" autocomplete="off">
                     <input id="persona-tag-input" class="text_pole" type="text"
-                           placeholder="输入标签名，回车添加" enterkeyhint="done">
+                           placeholder="输入标签，逗号分隔可批量添加" enterkeyhint="done">
                 </form>
             </div>
         `;
         $target.after(html);
+
+        // 位置编辑器：回车只收起键盘，点按钮才移动
+        $('#persona-position-input').on('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+        });
+        $('#persona-position-go').on('click', () => {
+            if (!currentPersonaAvatar) return;
+            const input = parseInt($('#persona-position-input').val(), 10);
+            if (isNaN(input) || input < 1) { toastr.warning('请输入有效的位置数字'); return; }
+            movePersonaToPosition(currentPersonaAvatar, input - 1);
+            $('#persona-position-input').val('');
+        });
 
         // 回车添加标签：通过 form submit 实现，兼容移动端虚拟键盘
         // （移动端 Android 的 keydown 事件 e.key 返回 "Unidentified" 而非 "Enter"，
@@ -1097,7 +1171,7 @@ jQuery(async () => {
         return `/thumbnail?type=persona&file=${encodeURIComponent(avatarId)}`;
     }
 
-    function buildPersonaCard(avatarId) {
+    function buildPersonaCard(avatarId, index) {
         const ctx = SillyTavern.getContext();
         const personaName = ctx.powerUserSettings.personas?.[avatarId] || '[未命名人设]';
         const desc = ctx.powerUserSettings.persona_descriptions?.[avatarId]?.description || '';
@@ -1105,6 +1179,10 @@ jQuery(async () => {
         const noDescText = $('#user_avatar_block').attr('no_desc_text') || '';
 
         const $card = $('<div class="avatar-container interactable"></div>').attr('data-avatar-id', avatarId).attr('tabindex', '0');
+
+        // 排序位号徽章
+        const $positionBadge = $('<span class="persona-position-badge"></span>').text(index + 1);
+        $card.append($positionBadge);
 
         // 批量选中复选框（仅在批量模式下显示）
         if (batchMode) {
@@ -1192,9 +1270,9 @@ jQuery(async () => {
         if (filteredList.length === 0) {
             $block.append('<div class="persona-empty-placeholder">暂无匹配的人设</div>');
         } else {
-            for (const avatarId of filteredList) {
-                $block.append(buildPersonaCard(avatarId));
-            }
+            filteredList.forEach((avatarId, index) => {
+                $block.append(buildPersonaCard(avatarId, index));
+            });
         }
 
         setTimeout(() => { isOwnRender = false; }, 0);
@@ -1571,6 +1649,76 @@ jQuery(async () => {
                     }
                 });
             }
+
+            // 汉化 ST 原生弹窗
+            document.querySelectorAll('dialog.popup:not(.persona-cn-done)').forEach(dialog => {
+                const content = dialog.querySelector('.popup-content');
+                if (!content) return;
+                const text = content.textContent || '';
+                let matched = false;
+
+                // 重命名人设弹窗
+                if (text.includes('Enter a name for this persona')) {
+                    content.querySelectorAll('h3').forEach(h => {
+                        if (h.textContent.includes('Rename Persona')) h.textContent = '重命名人设';
+                        if (h.textContent.includes('Enter a name for this persona')) h.textContent = '请输入人设名称：';
+                    });
+                    content.querySelectorAll('label').forEach(l => {
+                        if (l.textContent.includes('Persona Title')) l.textContent = '人设标题（可选，仅用于显示）';
+                    });
+                    matched = true;
+                }
+                // 创建人设弹窗
+                if (text.includes('Enter a name for this persona') || text.includes('Cancel if you')) {
+                    content.querySelectorAll('h3').forEach(h => {
+                        if (h.textContent.includes('Enter a name for this persona')) h.textContent = '请输入人设名称：';
+                    });
+                    content.querySelectorAll('.multiline, p, div').forEach(el => {
+                        if (el.textContent.includes('Cancel if you\'re just uploading')) {
+                            el.textContent = '如果只是上传头像可以取消。';
+                        }
+                        if (el.textContent.includes('You can always add or change it later')) {
+                            el.textContent = '之后还可以修改。';
+                        }
+                    });
+                    content.querySelectorAll('label').forEach(l => {
+                        if (l.textContent.includes('Persona Title')) l.textContent = '人设标题（可选，仅用于显示）';
+                    });
+                    matched = true;
+                }
+                // 删除确认弹窗
+                if (text.includes('Are you sure you want to delete this avatar')) {
+                    content.querySelectorAll('h3').forEach(h => {
+                        if (h.textContent.includes('Delete Persona')) h.textContent = '删除人设';
+                    });
+                    content.querySelectorAll('span, div, p').forEach(el => {
+                        if (el.textContent.includes('Are you sure you want to delete this avatar')) {
+                            el.innerHTML = '确定要删除这个头像吗？<br>关联的人设信息将全部丢失。';
+                        }
+                    });
+                    matched = true;
+                }
+                // 描述输入弹窗
+                if (text.includes('Enter a description for this persona')) {
+                    content.querySelectorAll('h3').forEach(h => {
+                        if (h.textContent.includes('Enter a description')) h.textContent = '请输入人设描述：';
+                    });
+                    content.querySelectorAll('.multiline, p, div').forEach(el => {
+                        if (el.textContent.includes('You can always add or change it later')) {
+                            el.textContent = '之后还可以修改。';
+                        }
+                    });
+                    matched = true;
+                }
+
+                if (matched) {
+                    dialog.classList.add('persona-cn-done');
+                    const okBtn = dialog.querySelector('.popup-button-ok');
+                    const cancelBtn = dialog.querySelector('.popup-button-cancel');
+                    if (okBtn && okBtn.textContent.trim() === 'OK') okBtn.textContent = '保存';
+                    if (cancelBtn && cancelBtn.textContent.trim() === 'Cancel') cancelBtn.textContent = '取消';
+                }
+            });
         }).observe(document.body, { childList: true, subtree: true });
     }
 
