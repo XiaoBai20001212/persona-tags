@@ -361,6 +361,9 @@ jQuery(async () => {
                     <i class="fa-solid fa-users"></i> 全部人设
                 </span>
                 <span class="persona-view-mode-info"></span>
+                <span class="persona-view-mode-btn persona-batch-mode-btn" title="批量编辑">
+                    <i class="fa-solid fa-list-check"></i> 批量
+                </span>
                 <span class="persona-view-mode-btn persona-refresh-btn" title="刷新人设列表">
                     <i class="fa-solid fa-rotate"></i>
                 </span>
@@ -389,6 +392,18 @@ jQuery(async () => {
             updateViewModeInfo();
             $icon.removeClass('fa-spin');
             toastr.success('已刷新');
+        });
+
+        // 批量编辑模式切换
+        $(document).off('click.ptBatchMode').on('click.ptBatchMode', '.persona-batch-mode-btn', function () {
+            batchMode = !batchMode;
+            $(this).toggleClass('active', batchMode);
+            if (!batchMode) {
+                selectedAvatars.clear();
+                $('#persona-batch-toolbar').remove();
+            }
+            applyFiltersAndRender();
+            if (batchMode) renderBatchToolbar();
         });
 
         updateViewModeInfo();
@@ -653,6 +668,7 @@ jQuery(async () => {
     }
 
     // ===== 批量选中状态 =====
+    let batchMode = false;
     const selectedAvatars = new Set();
 
     function toggleSelection(avatarId) {
@@ -685,7 +701,7 @@ jQuery(async () => {
     function renderBatchToolbar() {
         let $toolbar = $('#persona-batch-toolbar');
 
-        if (selectedAvatars.size === 0) {
+        if (!batchMode) {
             $toolbar.remove();
             return;
         }
@@ -716,18 +732,21 @@ jQuery(async () => {
         $toolbar.append('<span class="persona-batch-separator">|</span>');
 
         // 批量打标签
-        const $addTags = $('<span class="persona-batch-btn"><i class="fa-solid fa-tags"></i> 打标签</span>');
-        $addTags.on('click', batchAddTags);
+        const hasSelection = selectedAvatars.size > 0;
+        const disabledClass = hasSelection ? '' : ' persona-batch-btn-disabled';
+
+        const $addTags = $(`<span class="persona-batch-btn${disabledClass}"><i class="fa-solid fa-tags"></i> 打标签</span>`);
+        if (hasSelection) $addTags.on('click', batchAddTags);
         $toolbar.append($addTags);
 
         // 批量删标签
-        const $removeTags = $('<span class="persona-batch-btn"><i class="fa-solid fa-tag"></i> 删标签</span>');
-        $removeTags.on('click', batchRemoveTags);
+        const $removeTags = $(`<span class="persona-batch-btn${disabledClass}"><i class="fa-solid fa-tag"></i> 删标签</span>`);
+        if (hasSelection) $removeTags.on('click', batchRemoveTags);
         $toolbar.append($removeTags);
 
         // 批量删除
-        const $del = $('<span class="persona-batch-btn persona-batch-btn-danger"><i class="fa-solid fa-trash"></i> 删除</span>');
-        $del.on('click', batchDelete);
+        const $del = $(`<span class="persona-batch-btn persona-batch-btn-danger${disabledClass}"><i class="fa-solid fa-trash"></i> 删除</span>`);
+        if (hasSelection) $del.on('click', batchDelete);
         $toolbar.append($del);
     }
 
@@ -850,6 +869,8 @@ jQuery(async () => {
                 </div>
             </div>`);
             $overlay.append($dialog);
+            // 阻止所有鼠标事件穿透到 ST（防止 ST 的抽屉关闭）
+            $overlay.on('mousedown pointerdown touchstart', (e) => e.stopPropagation());
             $('body').append($overlay);
 
             const close = (val) => { $overlay.remove(); resolve(val); };
@@ -898,6 +919,7 @@ jQuery(async () => {
             }
 
             $overlay.append($dialog);
+            $overlay.on('mousedown pointerdown touchstart', (e) => e.stopPropagation());
             $('body').append($overlay);
 
             const close = (val) => { $overlay.remove(); resolve(val); };
@@ -966,15 +988,17 @@ jQuery(async () => {
 
         const $card = $('<div class="avatar-container interactable"></div>').attr('data-avatar-id', avatarId).attr('tabindex', '0');
 
-        // 批量选中复选框
-        const isChecked = selectedAvatars.has(avatarId);
-        const $checkWrap = $('<label class="persona-card-checkbox-wrap"></label>');
-        const $check = $('<input type="checkbox" class="persona-card-checkbox">').prop('checked', isChecked);
-        $checkWrap.on('click', (e) => e.stopPropagation());
-        $check.on('change', () => toggleSelection(avatarId));
-        $checkWrap.append($check);
-        $card.append($checkWrap);
-        $card.toggleClass('persona-card-selected', isChecked);
+        // 批量选中复选框（仅在批量模式下显示）
+        if (batchMode) {
+            const isChecked = selectedAvatars.has(avatarId);
+            const $checkWrap = $('<label class="persona-card-checkbox-wrap"></label>');
+            const $check = $('<input type="checkbox" class="persona-card-checkbox">').prop('checked', isChecked);
+            $checkWrap.on('click', (e) => e.stopPropagation());
+            $check.on('change', () => toggleSelection(avatarId));
+            $checkWrap.append($check);
+            $card.append($checkWrap);
+            $card.toggleClass('persona-card-selected', isChecked);
+        }
 
         // 头像
         const $avatar = $('<div class="avatar"></div>').attr('data-avatar-id', avatarId).attr('title', avatarId);
@@ -1395,9 +1419,12 @@ jQuery(async () => {
                 }
                 renderFilterArea();
                 updateViewModeInfo();
+                // 同步批量模式按钮状态
+                $('.persona-batch-mode-btn').toggleClass('active', batchMode);
                 const cur = detectCurrentPersona();
                 if (cur) renderTagEditor(cur);
                 applyFiltersAndRender();
+                if (batchMode) renderBatchToolbar();
             }, 300);
         });
 

@@ -477,6 +477,12 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
     opacity: 1;
 }
 
+.persona-batch-btn-disabled {
+    opacity: 0.3 !important;
+    cursor: default;
+    pointer-events: none;
+}
+
 .persona-batch-btn-danger {
     color: #e74c3c;
     border-color: rgba(231, 76, 60, 0.4);
