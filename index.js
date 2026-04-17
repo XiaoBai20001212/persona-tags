@@ -194,6 +194,15 @@ jQuery(async () => {
         saveSettings();
     }
 
+    function getPersonaOrder() {
+        return getSettings().personaOrder || [];
+    }
+
+    function savePersonaOrder(orderedIds) {
+        getSettings().personaOrder = orderedIds;
+        saveSettings();
+    }
+
     // ===== 绑定关系查询 =====
     /**
      * 获取与当前角色卡/群组绑定的所有人设 avatarId 列表
@@ -962,12 +971,25 @@ jQuery(async () => {
             });
         }
 
-        // 按名称排序
-        result.sort((a, b) => {
-            const nameA = ctx.powerUserSettings.personas?.[a] || a;
-            const nameB = ctx.powerUserSettings.personas?.[b] || b;
-            return nameA.localeCompare(nameB);
-        });
+        // 排序：优先使用自定义顺序，未排序的按名称追加到末尾
+        const order = getPersonaOrder();
+        if (order.length > 0) {
+            const orderMap = new Map(order.map((id, i) => [id, i]));
+            result.sort((a, b) => {
+                const ia = orderMap.has(a) ? orderMap.get(a) : Infinity;
+                const ib = orderMap.has(b) ? orderMap.get(b) : Infinity;
+                if (ia !== ib) return ia - ib;
+                const nameA = ctx.powerUserSettings.personas?.[a] || a;
+                const nameB = ctx.powerUserSettings.personas?.[b] || b;
+                return nameA.localeCompare(nameB);
+            });
+        } else {
+            result.sort((a, b) => {
+                const nameA = ctx.powerUserSettings.personas?.[a] || a;
+                const nameB = ctx.powerUserSettings.personas?.[b] || b;
+                return nameA.localeCompare(nameB);
+            });
+        }
 
         return result;
     }
@@ -1088,6 +1110,139 @@ jQuery(async () => {
         pruneSelection(filtered);
         renderPersonaList(filtered);
         renderBatchToolbar();
+        initPersonaDrag();
+    }
+
+    // ===== 人设卡片拖拽排序 =====
+    let personaDragState = null;
+
+    function initPersonaDrag() {
+        const block = document.getElementById('user_avatar_block');
+        if (!block) return;
+        block.querySelectorAll('.avatar-container').forEach(card => {
+            card.addEventListener('pointerdown', onPersonaDragPointerDown);
+        });
+    }
+
+    function onPersonaDragPointerDown(e) {
+        if (personaDragState) return;
+        // 复选框区域不触发拖拽
+        if (e.target.closest('.persona-card-checkbox-wrap')) return;
+        const card = e.currentTarget;
+        const avatarId = card.getAttribute('data-avatar-id');
+        if (!avatarId) return;
+
+        const longPressTimer = setTimeout(() => {
+            startPersonaDrag(card, avatarId, e.clientX, e.clientY);
+        }, 400);
+
+        const cancelLongPress = () => {
+            clearTimeout(longPressTimer);
+            document.removeEventListener('pointermove', onEarlyMove);
+            document.removeEventListener('pointerup', cancelLongPress);
+            document.removeEventListener('pointercancel', cancelLongPress);
+        };
+
+        const onEarlyMove = (ev) => {
+            const dx = ev.clientX - e.clientX;
+            const dy = ev.clientY - e.clientY;
+            if (dx * dx + dy * dy > 64) cancelLongPress();
+        };
+
+        document.addEventListener('pointermove', onEarlyMove);
+        document.addEventListener('pointerup', cancelLongPress);
+        document.addEventListener('pointercancel', cancelLongPress);
+    }
+
+    function startPersonaDrag(card, avatarId, startX, startY) {
+        const ctx = SillyTavern.getContext();
+        const personaName = ctx.powerUserSettings.personas?.[avatarId] || avatarId;
+        card.classList.add('persona-card-dragging-source');
+
+        // 简洁的拖拽幽灵（只显示名字）
+        const ghost = document.createElement('div');
+        ghost.className = 'persona-card-drag-ghost';
+        ghost.textContent = personaName;
+        ghost.style.position = 'fixed';
+        ghost.style.left = startX + 'px';
+        ghost.style.top = (startY - 16) + 'px';
+        ghost.style.zIndex = '99999';
+        ghost.style.pointerEvents = 'none';
+        document.body.appendChild(ghost);
+
+        const block = document.getElementById('user_avatar_block');
+        const allCards = [...block.querySelectorAll('.avatar-container')];
+        const avatarIds = allCards.map(c => c.getAttribute('data-avatar-id'));
+        const sourceIndex = avatarIds.indexOf(avatarId);
+
+        personaDragState = {
+            ghost, card, avatarId, sourceIndex, avatarIds, allCards,
+            currentDropIndex: sourceIndex,
+            offsetX: 0, offsetY: 16,
+        };
+
+        document.addEventListener('pointermove', onPersonaDragMove);
+        document.addEventListener('pointerup', onPersonaDragEnd);
+        document.addEventListener('pointercancel', onPersonaDragEnd);
+        document.addEventListener('touchmove', preventPersonaScroll, { passive: false });
+    }
+
+    function preventPersonaScroll(e) { e.preventDefault(); }
+
+    function onPersonaDragMove(e) {
+        if (!personaDragState) return;
+        const { ghost, allCards, sourceIndex } = personaDragState;
+
+        ghost.style.left = e.clientX + 'px';
+        ghost.style.top = (e.clientY - personaDragState.offsetY) + 'px';
+
+        ghost.style.display = 'none';
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        ghost.style.display = '';
+
+        const targetCard = el?.closest('.avatar-container');
+        allCards.forEach(c => c.classList.remove('persona-card-drop-above', 'persona-card-drop-below'));
+
+        if (!targetCard) return;
+        const idx = allCards.indexOf(targetCard);
+        if (idx === -1 || idx === sourceIndex) return;
+
+        const r = targetCard.getBoundingClientRect();
+        const midY = r.top + r.height / 2;
+        const dropIndex = e.clientY < midY ? idx : idx + 1;
+
+        personaDragState.currentDropIndex = dropIndex;
+        if (e.clientY < midY) {
+            targetCard.classList.add('persona-card-drop-above');
+        } else {
+            targetCard.classList.add('persona-card-drop-below');
+        }
+    }
+
+    function onPersonaDragEnd() {
+        if (!personaDragState) return;
+        const { ghost, card, sourceIndex, currentDropIndex, avatarIds } = personaDragState;
+
+        document.removeEventListener('pointermove', onPersonaDragMove);
+        document.removeEventListener('pointerup', onPersonaDragEnd);
+        document.removeEventListener('pointercancel', onPersonaDragEnd);
+        document.removeEventListener('touchmove', preventPersonaScroll);
+
+        ghost.remove();
+        card.classList.remove('persona-card-dragging-source');
+        document.querySelectorAll('.persona-card-drop-above, .persona-card-drop-below').forEach(
+            c => c.classList.remove('persona-card-drop-above', 'persona-card-drop-below')
+        );
+
+        if (sourceIndex !== currentDropIndex && currentDropIndex !== sourceIndex + 1) {
+            const moved = avatarIds.splice(sourceIndex, 1)[0];
+            const insertAt = currentDropIndex > sourceIndex ? currentDropIndex - 1 : currentDropIndex;
+            avatarIds.splice(insertAt, 0, moved);
+            savePersonaOrder(avatarIds);
+        }
+
+        personaDragState = null;
+        applyFiltersAndRender();
     }
 
     // ===== 工具函数 =====

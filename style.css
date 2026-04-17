@@ -224,6 +224,7 @@
 .persona-view-mode-bar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 4px;
     margin: 6px 0 2px;
     padding: 0 2px;
@@ -239,6 +240,8 @@
     opacity: 0.5;
     transition: opacity 0.2s;
     user-select: none;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .persona-view-mode-btn:hover {
@@ -256,6 +259,11 @@
     opacity: 0.6;
     margin-left: 4px;
     color: var(--SmartThemeBodyColor);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
 }
 
 
@@ -435,11 +443,38 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
 
 #user_avatar_block .avatar-container {
     position: relative;
+    touch-action: none;
 }
 
 .persona-card-selected {
     outline: 2px solid var(--SmartThemeBodyColor) !important;
     outline-offset: -2px;
+}
+
+/* --- Persona Card Drag & Drop --- */
+.persona-card-dragging-source {
+    opacity: 0.25 !important;
+}
+
+.persona-card-drag-ghost {
+    background: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    border: 1px solid var(--SmartThemeBodyColor);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 0.85em;
+    font-weight: bold;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    transform: translateX(-50%);
+}
+
+.persona-card-drop-above {
+    box-shadow: 0 -3px 0 0 var(--SmartThemeBodyColor) !important;
+}
+
+.persona-card-drop-below {
+    box-shadow: 0 3px 0 0 var(--SmartThemeBodyColor) !important;
 }
 
 /* --- Batch Toolbar --- */
@@ -542,6 +577,17 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+}
+
+.persona-batch-dialog-buttons .persona-batch-btn {
+    background: var(--SmartThemeBlurTintColor);
+    border-color: var(--SmartThemeBodyColor);
+    opacity: 0.85;
+    padding: 5px 14px;
+}
+
+.persona-batch-dialog-buttons .persona-batch-btn:hover {
+    opacity: 1;
 }
 
 /* --- Batch Tag Picker --- */
