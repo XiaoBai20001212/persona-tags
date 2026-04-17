@@ -194,13 +194,62 @@ jQuery(async () => {
         saveSettings();
     }
 
+    function getOrderKey() {
+        if (viewMode === 'all') return '_all';
+        const ctx = SillyTavern.getContext();
+        if (ctx.groupId) return 'group:' + ctx.groupId;
+        if (ctx.characterId != null) {
+            const avatar = ctx.characters?.[ctx.characterId]?.avatar;
+            if (avatar) return 'char:' + avatar;
+        }
+        return '_all';
+    }
+
+    function ensurePersonaOrderObj() {
+        const settings = getSettings();
+        // 兼容旧版：扁平数组迁移为对象
+        if (Array.isArray(settings.personaOrder)) {
+            settings.personaOrder = { _all: settings.personaOrder };
+            saveSettings();
+        }
+        if (!settings.personaOrder || typeof settings.personaOrder !== 'object') {
+            settings.personaOrder = {};
+        }
+        return settings.personaOrder;
+    }
+
     function getPersonaOrder() {
-        return getSettings().personaOrder || [];
+        const obj = ensurePersonaOrderObj();
+        return obj[getOrderKey()] || [];
     }
 
     function savePersonaOrder(orderedIds) {
-        getSettings().personaOrder = orderedIds;
+        const obj = ensurePersonaOrderObj();
+        obj[getOrderKey()] = orderedIds;
         saveSettings();
+    }
+
+    function purgeOrphanedOrders() {
+        const obj = ensurePersonaOrderObj();
+        const ctx = SillyTavern.getContext();
+        let changed = false;
+        for (const key of Object.keys(obj)) {
+            if (key === '_all') continue;
+            let valid = false;
+            if (key.startsWith('char:')) {
+                const charAvatar = key.slice(5);
+                valid = ctx.characters?.some(c => c.avatar === charAvatar);
+            } else if (key.startsWith('group:')) {
+                const groupId = key.slice(6);
+                valid = ctx.groups?.some(g => g.id === groupId);
+            }
+            if (!valid) {
+                console.log(LOG, 'Purging orphaned persona order:', key);
+                delete obj[key];
+                changed = true;
+            }
+        }
+        if (changed) saveSettings();
     }
 
     // ===== 绑定关系查询 =====
@@ -1235,10 +1284,29 @@ jQuery(async () => {
         );
 
         if (sourceIndex !== currentDropIndex && currentDropIndex !== sourceIndex + 1) {
-            const moved = avatarIds.splice(sourceIndex, 1)[0];
+            // 计算新的可见顺序
+            const newVisible = [...avatarIds];
+            const moved = newVisible.splice(sourceIndex, 1)[0];
             const insertAt = currentDropIndex > sourceIndex ? currentDropIndex - 1 : currentDropIndex;
-            avatarIds.splice(insertAt, 0, moved);
-            savePersonaOrder(avatarIds);
+            newVisible.splice(insertAt, 0, moved);
+
+            // 将新的可见顺序合并回完整排序（只改可见项的相对位置）
+            const fullOrder = getPersonaOrder();
+            const visibleSet = new Set(avatarIds);
+            const merged = [];
+            let vi = 0;
+            for (const id of fullOrder) {
+                if (visibleSet.has(id)) {
+                    merged.push(newVisible[vi++]);
+                } else {
+                    merged.push(id);
+                }
+            }
+            // 追加 fullOrder 中没有的新项
+            for (; vi < newVisible.length; vi++) {
+                merged.push(newVisible[vi]);
+            }
+            savePersonaOrder(merged);
         }
 
         personaDragState = null;
@@ -1459,6 +1527,7 @@ jQuery(async () => {
         getSettings();
         await refreshServerAvatars();
         purgeOrphanedSTEntries();
+        purgeOrphanedOrders();
         injectTagEditor();
         injectViewModeToggle();
         startPopupObserver();
