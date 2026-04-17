@@ -232,31 +232,17 @@ jQuery(async () => {
     }
 
     function movePersonaToPosition(avatarId, targetIndex) {
-        const filtered = applyFilters(serverAvatarList);
-        const currentIndex = filtered.indexOf(avatarId);
+        const contextList = getContextList();
+        const currentIndex = contextList.indexOf(avatarId);
         if (currentIndex === -1) return;
-        targetIndex = Math.max(0, Math.min(targetIndex, filtered.length - 1));
+        targetIndex = Math.max(0, Math.min(targetIndex, contextList.length - 1));
         if (currentIndex === targetIndex) { toastr.info('已在该位置'); return; }
 
-        // 计算新的可见顺序
-        const newVisible = [...filtered];
-        newVisible.splice(currentIndex, 1);
-        newVisible.splice(targetIndex, 0, avatarId);
-
-        // 合并回完整排序
-        const obj = ensurePersonaOrderObj();
-        const key = getOrderKey();
-        const fullOrder = obj[key] || [];
-        const visibleSet = new Set(filtered);
-        const merged = [];
-        let vi = 0;
-        for (const id of fullOrder) {
-            if (visibleSet.has(id)) merged.push(newVisible[vi++]);
-            else merged.push(id);
-        }
-        for (; vi < newVisible.length; vi++) merged.push(newVisible[vi]);
-        obj[key] = merged;
-        saveSettings();
+        // 直接在完整队列上移动
+        const newOrder = [...contextList];
+        newOrder.splice(currentIndex, 1);
+        newOrder.splice(targetIndex, 0, avatarId);
+        savePersonaOrder(newOrder);
 
         applyFiltersAndRender();
         renderTagEditor(avatarId);
@@ -363,10 +349,10 @@ jQuery(async () => {
         const $posEditor = $('#persona-position-editor');
         if ($posEditor.length) {
             if (avatarId) {
-                const filtered = applyFilters(serverAvatarList);
-                const pos = filtered.indexOf(avatarId);
-                $('#persona-position-current').text(pos >= 0 ? `当前 #${pos + 1}（共 ${filtered.length}）` : '');
-                $('#persona-position-input').val('').prop('disabled', false).attr('max', filtered.length);
+                const contextList = getContextList();
+                const pos = contextList.indexOf(avatarId);
+                $('#persona-position-current').text(pos >= 0 ? `当前 #${pos + 1}（共 ${contextList.length}）` : '');
+                $('#persona-position-input').val('').prop('disabled', false).attr('max', contextList.length);
                 $('#persona-position-go').removeClass('persona-batch-btn-disabled');
             } else {
                 $('#persona-position-current').text('');
@@ -1109,11 +1095,38 @@ jQuery(async () => {
     }
 
     // ===== 纯数据筛选（不操作 DOM） =====
+
+    /** 完整队列：只管视图模式 + 排序，不管标签/搜索筛选 */
+    function getContextList() {
+        const ctx = SillyTavern.getContext();
+        let result = [...serverAvatarList];
+
+        const connectedPersonas = (viewMode === 'connected') ? getConnectedPersonas() : null;
+        if (connectedPersonas !== null) {
+            result = result.filter(avatarId => connectedPersonas.includes(avatarId));
+        }
+
+        const order = getPersonaOrder();
+        if (order.length > 0) {
+            const orderMap = new Map(order.map((id, i) => [id, i]));
+            result.sort((a, b) => {
+                const ia = orderMap.has(a) ? orderMap.get(a) : Infinity;
+                const ib = orderMap.has(b) ? orderMap.get(b) : Infinity;
+                if (ia !== ib) return ia - ib;
+                return (ctx.powerUserSettings.personas?.[a] || a).localeCompare(ctx.powerUserSettings.personas?.[b] || b);
+            });
+        } else {
+            result.sort((a, b) => (ctx.powerUserSettings.personas?.[a] || a).localeCompare(ctx.powerUserSettings.personas?.[b] || b));
+        }
+
+        return result;
+    }
+
+    /** 在完整队列上再叠加标签/搜索筛选 */
     function applyFilters(avatarList) {
         const ctx = SillyTavern.getContext();
-        let result = [...avatarList];
+        let result = getContextList();
 
-        // 搜索过滤（读取 ST 的搜索框）
         const searchTerm = ($('#persona_search_bar').val() || '').trim().toLowerCase();
         if (searchTerm) {
             result = result.filter(avatarId => {
@@ -1123,13 +1136,6 @@ jQuery(async () => {
             });
         }
 
-        // 视图模式过滤
-        const connectedPersonas = (viewMode === 'connected') ? getConnectedPersonas() : null;
-        if (connectedPersonas !== null) {
-            result = result.filter(avatarId => connectedPersonas.includes(avatarId));
-        }
-
-        // 标签过滤
         if (activeFilters.size > 0) {
             result = result.filter(avatarId => {
                 const tags = getPersonaTags(avatarId);
@@ -1138,26 +1144,6 @@ jQuery(async () => {
                 } else {
                     return ![...activeFilters].some(f => tags.includes(f));
                 }
-            });
-        }
-
-        // 排序：优先使用自定义顺序，未排序的按名称追加到末尾
-        const order = getPersonaOrder();
-        if (order.length > 0) {
-            const orderMap = new Map(order.map((id, i) => [id, i]));
-            result.sort((a, b) => {
-                const ia = orderMap.has(a) ? orderMap.get(a) : Infinity;
-                const ib = orderMap.has(b) ? orderMap.get(b) : Infinity;
-                if (ia !== ib) return ia - ib;
-                const nameA = ctx.powerUserSettings.personas?.[a] || a;
-                const nameB = ctx.powerUserSettings.personas?.[b] || b;
-                return nameA.localeCompare(nameB);
-            });
-        } else {
-            result.sort((a, b) => {
-                const nameA = ctx.powerUserSettings.personas?.[a] || a;
-                const nameB = ctx.powerUserSettings.personas?.[b] || b;
-                return nameA.localeCompare(nameB);
             });
         }
 
@@ -1270,9 +1256,11 @@ jQuery(async () => {
         if (filteredList.length === 0) {
             $block.append('<div class="persona-empty-placeholder">暂无匹配的人设</div>');
         } else {
-            filteredList.forEach((avatarId, index) => {
-                $block.append(buildPersonaCard(avatarId, index));
-            });
+            const contextList = getContextList();
+            for (const avatarId of filteredList) {
+                const globalPos = contextList.indexOf(avatarId);
+                $block.append(buildPersonaCard(avatarId, globalPos));
+            }
         }
 
         setTimeout(() => { isOwnRender = false; }, 0);
