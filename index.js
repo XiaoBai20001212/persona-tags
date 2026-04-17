@@ -159,7 +159,6 @@ jQuery(async () => {
     }
 
     function getAllTags() {
-        purgeOrphanedEntries();
         const allTags = new Set();
         for (const tags of Object.values(getSettings().tagMap)) {
             for (const tag of tags) {
@@ -238,11 +237,24 @@ jQuery(async () => {
         targetIndex = Math.max(0, Math.min(targetIndex, contextList.length - 1));
         if (currentIndex === targetIndex) { toastr.info('已在该位置'); return; }
 
-        // 直接在完整队列上移动
-        const newOrder = [...contextList];
-        newOrder.splice(currentIndex, 1);
-        newOrder.splice(targetIndex, 0, avatarId);
-        savePersonaOrder(newOrder);
+        const newVisible = [...contextList];
+        newVisible.splice(currentIndex, 1);
+        newVisible.splice(targetIndex, 0, avatarId);
+
+        // 合并回完整排序（保留不在当前视图中的项）
+        const obj = ensurePersonaOrderObj();
+        const key = getOrderKey();
+        const fullOrder = obj[key] || [];
+        const visibleSet = new Set(contextList);
+        const merged = [];
+        let vi = 0;
+        for (const id of fullOrder) {
+            if (visibleSet.has(id)) merged.push(newVisible[vi++]);
+            else merged.push(id);
+        }
+        for (; vi < newVisible.length; vi++) merged.push(newVisible[vi]);
+        obj[key] = merged;
+        saveSettings();
 
         applyFiltersAndRender();
         renderTagEditor(avatarId);
@@ -259,7 +271,7 @@ jQuery(async () => {
             let valid = false;
             if (key.startsWith('char:')) {
                 const charAvatar = key.slice(5);
-                valid = ctx.characters?.some(c => c.avatar === charAvatar);
+                valid = ctx.characters?.some(c => c?.avatar === charAvatar);
             } else if (key.startsWith('group:')) {
                 const groupId = key.slice(6);
                 valid = ctx.groups?.some(g => g.id === groupId);
@@ -410,12 +422,12 @@ jQuery(async () => {
                     <span>排序位置</span>
                     <span id="persona-position-current"></span>
                 </div>
-                <div class="persona-position-controls">
+                <form id="persona-position-form" class="persona-position-controls" autocomplete="off">
                     <span class="persona-position-label">移动到第</span>
                     <input id="persona-position-input" class="text_pole persona-position-input" type="number" min="1" enterkeyhint="done">
                     <span class="persona-position-label">位</span>
                     <span id="persona-position-go" class="persona-batch-btn">移动</span>
-                </div>
+                </form>
             </div>
             <div id="persona-tags-editor-section" class="persona-tags-section">
                 <div class="persona-tags-header">
@@ -431,9 +443,10 @@ jQuery(async () => {
         `;
         $target.after(html);
 
-        // 位置编辑器：回车只收起键盘，点按钮才移动
-        $('#persona-position-input').on('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+        // 位置编辑器：form submit 收起键盘（兼容安卓），按钮触发移动
+        $('#persona-position-form').on('submit', (e) => {
+            e.preventDefault();
+            $('#persona-position-input').blur();
         });
         $('#persona-position-go').on('click', () => {
             if (!currentPersonaAvatar) return;
@@ -812,7 +825,7 @@ jQuery(async () => {
     }
 
     function selectAllVisible() {
-        const filtered = applyFilters(serverAvatarList);
+        const filtered = applyFilters();
         for (const id of filtered) selectedAvatars.add(id);
         applyFiltersAndRender();
         renderBatchToolbar();
@@ -995,7 +1008,6 @@ jQuery(async () => {
         }
     }
 
-    // 批量操作辅助弹窗：文字输入
     function showBatchInput(title, message) {
         return new Promise(resolve => {
             const $overlay = $('<div class="persona-batch-overlay"></div>');
@@ -1011,59 +1023,46 @@ jQuery(async () => {
                 </div>
             </div>`);
             $overlay.append($dialog);
-            // 阻止所有鼠标事件穿透到 ST（防止 ST 的抽屉关闭）
             $overlay.on('mousedown pointerdown touchstart', (e) => e.stopPropagation());
             $('body').append($overlay);
-
             const close = (val) => { $overlay.remove(); resolve(val); };
-
+            const getVal = () => $dialog.find('.persona-batch-dialog-input').val().trim();
             $dialog.find('.persona-batch-dialog-cancel').on('click', () => close(null));
             $overlay.on('click', (e) => { if (e.target === $overlay[0]) close(null); });
-            $dialog.find('.persona-batch-dialog-form').on('submit', (e) => {
-                e.preventDefault();
-                close($dialog.find('.persona-batch-dialog-input').val().trim());
-            });
-            $dialog.find('.persona-batch-dialog-ok').on('click', () => {
-                close($dialog.find('.persona-batch-dialog-input').val().trim());
-            });
-
+            $dialog.find('.persona-batch-dialog-form').on('submit', (e) => { e.preventDefault(); close(getVal()); });
+            $dialog.find('.persona-batch-dialog-ok').on('click', () => close(getVal()));
             setTimeout(() => $dialog.find('.persona-batch-dialog-input').focus(), 50);
         });
     }
 
-    // 批量操作辅助弹窗：标签选择器
     function showBatchTagPicker(title, message, tags, tagCounts) {
+        const picked = new Set();
+        let pickerHtml = '<div class="persona-batch-tag-picker">';
+        for (const tag of tags) {
+            const color = getTagColor(tag);
+            pickerHtml += `<span class="persona-batch-tag-pill" data-tag="${tag}" style="background:${color.bg};color:${color.fg}">${tag} (${tagCounts[tag]})</span>`;
+        }
+        pickerHtml += '</div>';
+
         return new Promise(resolve => {
             const $overlay = $('<div class="persona-batch-overlay"></div>');
             const $dialog = $(`<div class="persona-batch-dialog">
                 <div class="persona-batch-dialog-title">${title}</div>
                 <div class="persona-batch-dialog-msg">${message}</div>
-                <div class="persona-batch-tag-picker"></div>
+                ${pickerHtml}
                 <div class="persona-batch-dialog-buttons">
                     <span class="persona-batch-btn persona-batch-dialog-cancel">取消</span>
                     <span class="persona-batch-btn persona-batch-dialog-ok">移除选中</span>
                 </div>
             </div>`);
-
-            const picked = new Set();
-            const $picker = $dialog.find('.persona-batch-tag-picker');
-            for (const tag of tags) {
-                const color = getTagColor(tag);
-                const $pill = $('<span class="persona-batch-tag-pill"></span>')
-                    .css({ background: color.bg, color: color.fg })
-                    .text(`${tag} (${tagCounts[tag]})`)
-                    .attr('data-tag', tag);
-                $pill.on('click', () => {
-                    if (picked.has(tag)) { picked.delete(tag); $pill.removeClass('picked'); }
-                    else { picked.add(tag); $pill.addClass('picked'); }
-                });
-                $picker.append($pill);
-            }
-
+            $dialog.find('.persona-batch-tag-pill').on('click', function () {
+                const tag = $(this).attr('data-tag');
+                if (picked.has(tag)) { picked.delete(tag); $(this).removeClass('picked'); }
+                else { picked.add(tag); $(this).addClass('picked'); }
+            });
             $overlay.append($dialog);
             $overlay.on('mousedown pointerdown touchstart', (e) => e.stopPropagation());
             $('body').append($overlay);
-
             const close = (val) => { $overlay.remove(); resolve(val); };
             $dialog.find('.persona-batch-dialog-cancel').on('click', () => close(null));
             $overlay.on('click', (e) => { if (e.target === $overlay[0]) close(null); });
@@ -1071,7 +1070,6 @@ jQuery(async () => {
         });
     }
 
-    // 批量操作辅助弹窗：确认（替代原生 confirm）
     function showBatchConfirm(title, message) {
         return new Promise(resolve => {
             const $overlay = $('<div class="persona-batch-overlay"></div>');
@@ -1086,7 +1084,6 @@ jQuery(async () => {
             $overlay.append($dialog);
             $overlay.on('mousedown pointerdown touchstart', (e) => e.stopPropagation());
             $('body').append($overlay);
-
             const close = (val) => { $overlay.remove(); resolve(val); };
             $dialog.find('.persona-batch-dialog-cancel').on('click', () => close(false));
             $overlay.on('click', (e) => { if (e.target === $overlay[0]) close(false); });
@@ -1103,7 +1100,8 @@ jQuery(async () => {
 
         const connectedPersonas = (viewMode === 'connected') ? getConnectedPersonas() : null;
         if (connectedPersonas !== null) {
-            result = result.filter(avatarId => connectedPersonas.includes(avatarId));
+            const connectedSet = new Set(connectedPersonas);
+            result = result.filter(avatarId => connectedSet.has(avatarId));
         }
 
         const order = getPersonaOrder();
@@ -1123,9 +1121,9 @@ jQuery(async () => {
     }
 
     /** 在完整队列上再叠加标签/搜索筛选 */
-    function applyFilters(avatarList) {
+    function applyFilters(cachedContextList) {
         const ctx = SillyTavern.getContext();
-        let result = getContextList();
+        let result = cachedContextList || getContextList();
 
         const searchTerm = ($('#persona_search_bar').val() || '').trim().toLowerCase();
         if (searchTerm) {
@@ -1157,12 +1155,12 @@ jQuery(async () => {
         return `/thumbnail?type=persona&file=${encodeURIComponent(avatarId)}`;
     }
 
-    function buildPersonaCard(avatarId, index) {
+    function buildPersonaCard(avatarId, index, noDescText) {
         const ctx = SillyTavern.getContext();
         const personaName = ctx.powerUserSettings.personas?.[avatarId] || '[未命名人设]';
         const desc = ctx.powerUserSettings.persona_descriptions?.[avatarId]?.description || '';
         const title = ctx.powerUserSettings.persona_descriptions?.[avatarId]?.title || '';
-        const noDescText = $('#user_avatar_block').attr('no_desc_text') || '';
+        noDescText = noDescText || '';
 
         const $card = $('<div class="avatar-container interactable"></div>').attr('data-avatar-id', avatarId).attr('tabindex', '0');
 
@@ -1246,20 +1244,21 @@ jQuery(async () => {
         return $card;
     }
 
-    function renderPersonaList(filteredList) {
+    function renderPersonaList(filteredList, contextList) {
         const $block = $('#user_avatar_block');
         if (!$block.length) return;
 
         isOwnRender = true;
+        const noDescText = $block.attr('no_desc_text') || '';
         $block.empty();
 
         if (filteredList.length === 0) {
             $block.append('<div class="persona-empty-placeholder">暂无匹配的人设</div>');
         } else {
-            const contextList = getContextList();
+            const ctx = contextList || getContextList();
             for (const avatarId of filteredList) {
-                const globalPos = contextList.indexOf(avatarId);
-                $block.append(buildPersonaCard(avatarId, globalPos));
+                const globalPos = ctx.indexOf(avatarId);
+                $block.append(buildPersonaCard(avatarId, globalPos, noDescText));
             }
         }
 
@@ -1268,9 +1267,10 @@ jQuery(async () => {
 
     function applyFiltersAndRender() {
         if (serverAvatarList.length === 0) return;
-        const filtered = applyFilters(serverAvatarList);
+        const contextList = getContextList();
+        const filtered = applyFilters(contextList);
         pruneSelection(filtered);
-        renderPersonaList(filtered);
+        renderPersonaList(filtered, contextList);
         renderBatchToolbar();
         initPersonaDrag();
     }
@@ -1362,6 +1362,18 @@ jQuery(async () => {
 
         ghost.style.left = e.clientX + 'px';
         ghost.style.top = (e.clientY - personaDragState.offsetY) + 'px';
+
+        // 拖拽到边缘时自动滚动容器
+        const block = document.getElementById('user_avatar_block');
+        if (block) {
+            const rect = block.getBoundingClientRect();
+            const edge = 40;
+            if (e.clientY < rect.top + edge && block.scrollTop > 0) {
+                block.scrollTop -= 8;
+            } else if (e.clientY > rect.bottom - edge) {
+                block.scrollTop += 8;
+            }
+        }
 
         ghost.style.display = 'none';
         const el = document.elementFromPoint(e.clientX, e.clientY);
@@ -1620,7 +1632,19 @@ jQuery(async () => {
     }
 
     function startPopupObserver() {
-        new MutationObserver(() => {
+        let popupDebounce = null;
+        new MutationObserver((mutations) => {
+            // 只在有新节点添加时才处理（过滤属性变化等噪声）
+            const hasAdded = mutations.some(m => m.addedNodes.length > 0);
+            if (!hasAdded) return;
+            if (popupDebounce) return;
+            popupDebounce = requestAnimationFrame(() => {
+                popupDebounce = null;
+                processPopups();
+            });
+        }).observe(document.body, { childList: true, subtree: true });
+
+        function processPopups() {
             // 每次 DOM 变化时检查是否有未增强的 .persona-list
             document.querySelectorAll('.persona-list:not(.persona-popup-enhanced)').forEach(el => {
                 if (el.querySelector('.avatar[data-type="persona"]')) {
@@ -1707,7 +1731,7 @@ jQuery(async () => {
                     if (cancelBtn && cancelBtn.textContent.trim() === 'Cancel') cancelBtn.textContent = '取消';
                 }
             });
-        }).observe(document.body, { childList: true, subtree: true });
+        }
     }
 
     // ===== 初始化 =====
