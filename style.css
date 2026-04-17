@@ -441,6 +441,12 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
     }
 }
 
+#user_avatar_block {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
 #user_avatar_block .avatar-container {
     position: relative;
     touch-action: pan-y;
