@@ -1808,7 +1808,17 @@ jQuery(async () => {
                 if (personaDragState) return;
                 handlePendingDuplication();
                 clearTimeout(takeoverDebounce);
-                takeoverDebounce = setTimeout(() => {
+                takeoverDebounce = setTimeout(async () => {
+                    // 检测 ST 是否渲染了缓存中没有的新人设（刚创建/导入的）
+                    if (serverAvatarSet) {
+                        const stCards = block.querySelectorAll('.avatar-container[data-avatar-id]');
+                        let hasNew = false;
+                        for (const card of stCards) {
+                            const id = card.getAttribute('data-avatar-id');
+                            if (id && !serverAvatarSet.has(id)) { hasNew = true; break; }
+                        }
+                        if (hasNew) await refreshServerAvatars();
+                    }
                     applyFiltersAndRender();
                     renderFilterArea();
                 }, 50);
