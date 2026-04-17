@@ -1096,10 +1096,7 @@ jQuery(async () => {
     /** 完整队列：只管视图模式 + 排序，不管标签/搜索筛选 */
     function getContextList() {
         const ctx = SillyTavern.getContext();
-        // 合并服务器缓存 + ST 内存中的 personas（捕获刚创建还没进缓存的）
-        const personas = ctx.powerUserSettings.personas || {};
-        const allIds = new Set([...serverAvatarList, ...Object.keys(personas)]);
-        let result = [...allIds];
+        let result = [...serverAvatarList];
 
         const connectedPersonas = (viewMode === 'connected') ? getConnectedPersonas() : null;
         if (connectedPersonas !== null) {
@@ -1467,6 +1464,7 @@ jQuery(async () => {
 
     // ===== 复制人设增强 =====
     let pendingDuplication = null;
+    let pendingCreationTags = null;
     let lastDupeCopyTags = false;
     let lastDupeCopyConnections = false;
 
@@ -1534,6 +1532,26 @@ jQuery(async () => {
                 });
 
                 controls.prepend(confirmBtn);
+            }
+        }
+    }
+
+    function handlePendingCreationTags() {
+        if (!pendingCreationTags) return;
+        if (Date.now() - pendingCreationTags.timestamp > 30000) {
+            pendingCreationTags = null;
+            return;
+        }
+        const ctx = SillyTavern.getContext();
+        const currentIds = new Set(Object.keys(ctx.powerUserSettings.personas));
+        for (const id of currentIds) {
+            if (!pendingCreationTags.existingIds.has(id)) {
+                for (const tag of pendingCreationTags.tags) {
+                    addTagToPersona(id, tag);
+                }
+                console.log(LOG, 'Applied creation tags to new persona:', id, pendingCreationTags.tags);
+                pendingCreationTags = null;
+                return;
             }
         }
     }
@@ -1672,7 +1690,9 @@ jQuery(async () => {
                 const text = content.textContent || '';
                 let matched = false;
 
-                // 重命名人设弹窗
+                // 创建/重命名人设弹窗
+                const isCreate = text.includes('Enter a name for this persona') && !text.includes('Rename Persona');
+                const isRename = text.includes('Rename Persona') || (text.includes('Enter a name for this persona') && text.includes('Rename'));
                 if (text.includes('Enter a name for this persona')) {
                     content.querySelectorAll('h3').forEach(h => {
                         if (h.textContent.includes('Rename Persona')) h.textContent = '重命名人设';
@@ -1681,10 +1701,38 @@ jQuery(async () => {
                     content.querySelectorAll('label').forEach(l => {
                         if (l.textContent.includes('Persona Title')) l.textContent = '人设标题（可选，仅用于显示）';
                     });
+                    // 创建弹窗注入标签输入框
+                    if (isCreate && !dialog.querySelector('.persona-create-tags-input')) {
+                        const controls = dialog.querySelector('.popup-controls') || dialog.querySelector('.popup-content');
+                        if (controls) {
+                            const tagDiv = document.createElement('div');
+                            tagDiv.style.cssText = 'margin: 8px 0; width: 100%;';
+                            tagDiv.innerHTML = '<label style="font-size:0.9em;opacity:0.7;">人设标签（可选，逗号分隔多个）</label><input class="text_pole persona-create-tags-input" type="text" placeholder="标签1, 标签2, ..." style="width:100%;box-sizing:border-box;margin-top:4px;">';
+                            const popupContent = dialog.querySelector('.popup-content');
+                            if (popupContent) popupContent.appendChild(tagDiv);
+                        }
+                        // 拦截保存按钮，记录待创建的标签
+                        const okBtn = dialog.querySelector('.popup-button-ok');
+                        if (okBtn) {
+                            okBtn.addEventListener('click', () => {
+                                const tagInput = dialog.querySelector('.persona-create-tags-input');
+                                const raw = tagInput ? tagInput.value.trim() : '';
+                                const tags = raw.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+                                if (tags.length > 0) {
+                                    const ctx = SillyTavern.getContext();
+                                    pendingCreationTags = {
+                                        tags,
+                                        existingIds: new Set(Object.keys(ctx.powerUserSettings.personas)),
+                                        timestamp: Date.now(),
+                                    };
+                                    console.log(LOG, 'Pending creation tags:', tags);
+                                }
+                            }, true);
+                        }
+                    }
                     matched = true;
                 }
-                // 创建人设弹窗
-                if (text.includes('Enter a name for this persona') || text.includes('Cancel if you')) {
+                if (text.includes('Cancel if you')) {
                     content.querySelectorAll('h3').forEach(h => {
                         if (h.textContent.includes('Enter a name for this persona')) h.textContent = '请输入人设名称：';
                     });
@@ -1810,8 +1858,15 @@ jQuery(async () => {
                 if (isOwnRender) return;
                 if (personaDragState) return;
                 handlePendingDuplication();
+                handlePendingCreationTags();
                 clearTimeout(takeoverDebounce);
                 takeoverDebounce = setTimeout(async () => {
+                    // 在替换 ST 的卡片之前，读取 ST 标记的选中状态
+                    const stSelected = block.querySelector('.avatar-container.selected');
+                    if (stSelected) {
+                        const id = stSelected.getAttribute('data-avatar-id');
+                        if (id) currentPersonaAvatar = id;
+                    }
                     // 检测 ST 是否渲染了缓存中没有的新人设（刚创建/导入的）
                     if (serverAvatarSet) {
                         const stCards = block.querySelectorAll('.avatar-container[data-avatar-id]');
@@ -1824,6 +1879,7 @@ jQuery(async () => {
                     }
                     applyFiltersAndRender();
                     renderFilterArea();
+                    if (currentPersonaAvatar) renderTagEditor(currentPersonaAvatar);
                 }, 50);
             }).observe(block, { childList: true });
         }
