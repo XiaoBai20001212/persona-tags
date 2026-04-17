@@ -1096,7 +1096,10 @@ jQuery(async () => {
     /** 完整队列：只管视图模式 + 排序，不管标签/搜索筛选 */
     function getContextList() {
         const ctx = SillyTavern.getContext();
-        let result = [...serverAvatarList];
+        // 合并服务器缓存 + ST 内存中的 personas（捕获刚创建还没进缓存的）
+        const personas = ctx.powerUserSettings.personas || {};
+        const allIds = new Set([...serverAvatarList, ...Object.keys(personas)]);
+        let result = [...allIds];
 
         const connectedPersonas = (viewMode === 'connected') ? getConnectedPersonas() : null;
         if (connectedPersonas !== null) {
