@@ -76,11 +76,13 @@ jQuery(async () => {
                     serverAvatarList = list;
                     serverAvatarSet = new Set(list);
                     console.log(LOG, 'Server avatar cache refreshed:', serverAvatarSet.size, 'avatars');
+                    return true;
                 }
             }
         } catch (e) {
             console.error(LOG, 'Failed to fetch avatar list:', e);
         }
+        return false;
     }
 
     // ===== 标签数据操作 =====
@@ -232,6 +234,7 @@ jQuery(async () => {
     function purgeOrphanedOrders() {
         const obj = ensurePersonaOrderObj();
         const ctx = SillyTavern.getContext();
+        if (!ctx.characters || !ctx.groups) return;
         let changed = false;
         for (const key of Object.keys(obj)) {
             if (key === '_all') continue;
@@ -247,6 +250,17 @@ jQuery(async () => {
                 console.log(LOG, 'Purging orphaned persona order:', key);
                 delete obj[key];
                 changed = true;
+            }
+        }
+        // 清理排序数组内的已删人设 ID
+        if (serverAvatarSet) {
+            for (const [key, arr] of Object.entries(obj)) {
+                if (!Array.isArray(arr)) continue;
+                const cleaned = arr.filter(id => serverAvatarSet.has(id));
+                if (cleaned.length !== arr.length) {
+                    obj[key] = cleaned;
+                    changed = true;
+                }
             }
         }
         if (changed) saveSettings();
@@ -443,13 +457,14 @@ jQuery(async () => {
         $(document).off('click.ptRefresh').on('click.ptRefresh', '.persona-refresh-btn', async function () {
             const $icon = $(this).find('i');
             $icon.addClass('fa-spin');
-            await refreshServerAvatars();
+            const ok = await refreshServerAvatars();
             purgeOrphanedSTEntries();
             applyFiltersAndRender();
             renderFilterArea();
             updateViewModeInfo();
             $icon.removeClass('fa-spin');
-            toastr.success('已刷新');
+            if (ok) toastr.success('已刷新');
+            else toastr.error('刷新失败，请检查网络');
         });
 
         // 批量编辑模式切换
@@ -877,11 +892,14 @@ jQuery(async () => {
     async function batchDelete() {
         if (selectedAvatars.size === 0) return;
         const ctx = SillyTavern.getContext();
-        const names = [...selectedAvatars].map(id => ctx.powerUserSettings.personas?.[id] || id).join('、');
-        const confirmed = confirm(`确定要删除 ${selectedAvatars.size} 个人设吗？\n\n${names}\n\n此操作不可撤销！`);
+        const confirmed = await showBatchConfirm(
+            '批量删除',
+            `确定要删除 ${selectedAvatars.size} 个人设吗？此操作不可撤销！`
+        );
         if (!confirmed) return;
 
         let deleted = 0;
+        const failed = [];
         for (const avatarId of [...selectedAvatars]) {
             try {
                 const resp = await fetch('/api/avatars/delete', {
@@ -894,9 +912,12 @@ jQuery(async () => {
                     if (ctx.powerUserSettings.persona_descriptions) delete ctx.powerUserSettings.persona_descriptions[avatarId];
                     selectedAvatars.delete(avatarId);
                     deleted++;
+                } else {
+                    failed.push(ctx.powerUserSettings.personas?.[avatarId] || avatarId);
                 }
             } catch (e) {
                 console.error(LOG, 'Failed to delete:', avatarId, e);
+                failed.push(ctx.powerUserSettings.personas?.[avatarId] || avatarId);
             }
         }
 
@@ -908,6 +929,9 @@ jQuery(async () => {
             renderFilterArea();
             renderBatchToolbar();
             toastr.success(`已删除 ${deleted} 个人设`);
+        }
+        if (failed.length > 0) {
+            toastr.error(`${failed.length} 个删除失败：${failed.join('、')}`);
         }
     }
 
@@ -984,6 +1008,29 @@ jQuery(async () => {
             $dialog.find('.persona-batch-dialog-cancel').on('click', () => close(null));
             $overlay.on('click', (e) => { if (e.target === $overlay[0]) close(null); });
             $dialog.find('.persona-batch-dialog-ok').on('click', () => close([...picked]));
+        });
+    }
+
+    // 批量操作辅助弹窗：确认（替代原生 confirm）
+    function showBatchConfirm(title, message) {
+        return new Promise(resolve => {
+            const $overlay = $('<div class="persona-batch-overlay"></div>');
+            const $dialog = $(`<div class="persona-batch-dialog">
+                <div class="persona-batch-dialog-title">${title}</div>
+                <div class="persona-batch-dialog-msg">${message}</div>
+                <div class="persona-batch-dialog-buttons">
+                    <span class="persona-batch-btn persona-batch-dialog-cancel">取消</span>
+                    <span class="persona-batch-btn persona-batch-btn-danger persona-batch-dialog-ok">确定删除</span>
+                </div>
+            </div>`);
+            $overlay.append($dialog);
+            $overlay.on('mousedown pointerdown touchstart', (e) => e.stopPropagation());
+            $('body').append($overlay);
+
+            const close = (val) => { $overlay.remove(); resolve(val); };
+            $dialog.find('.persona-batch-dialog-cancel').on('click', () => close(false));
+            $overlay.on('click', (e) => { if (e.target === $overlay[0]) close(false); });
+            $dialog.find('.persona-batch-dialog-ok').on('click', () => close(true));
         });
     }
 
@@ -1181,12 +1228,17 @@ jQuery(async () => {
         const avatarId = card.getAttribute('data-avatar-id');
         if (!avatarId) return;
 
+        const suppressCtxMenu = (ev) => ev.preventDefault();
+        document.addEventListener('contextmenu', suppressCtxMenu);
+
         const longPressTimer = setTimeout(() => {
+            document.removeEventListener('contextmenu', suppressCtxMenu);
             startPersonaDrag(card, avatarId, e.clientX, e.clientY);
         }, 400);
 
         const cancelLongPress = () => {
             clearTimeout(longPressTimer);
+            document.removeEventListener('contextmenu', suppressCtxMenu);
             document.removeEventListener('pointermove', onEarlyMove);
             document.removeEventListener('pointerup', cancelLongPress);
             document.removeEventListener('pointercancel', cancelLongPress);
@@ -1228,15 +1280,15 @@ jQuery(async () => {
             ghost, card, avatarId, sourceIndex, avatarIds, allCards,
             currentDropIndex: sourceIndex,
             offsetX: 0, offsetY: 16,
+            orderKey: getOrderKey(),
         };
 
         document.addEventListener('pointermove', onPersonaDragMove);
         document.addEventListener('pointerup', onPersonaDragEnd);
         document.addEventListener('pointercancel', onPersonaDragEnd);
-        document.addEventListener('touchmove', preventPersonaScroll, { passive: false });
+        document.addEventListener('touchmove', preventScroll, { passive: false });
     }
 
-    function preventPersonaScroll(e) { e.preventDefault(); }
 
     function onPersonaDragMove(e) {
         if (!personaDragState) return;
@@ -1270,12 +1322,12 @@ jQuery(async () => {
 
     function onPersonaDragEnd() {
         if (!personaDragState) return;
-        const { ghost, card, sourceIndex, currentDropIndex, avatarIds } = personaDragState;
+        const { ghost, card, sourceIndex, currentDropIndex, avatarIds, orderKey } = personaDragState;
 
         document.removeEventListener('pointermove', onPersonaDragMove);
         document.removeEventListener('pointerup', onPersonaDragEnd);
         document.removeEventListener('pointercancel', onPersonaDragEnd);
-        document.removeEventListener('touchmove', preventPersonaScroll);
+        document.removeEventListener('touchmove', preventScroll);
 
         ghost.remove();
         card.classList.remove('persona-card-dragging-source');
@@ -1291,7 +1343,9 @@ jQuery(async () => {
             newVisible.splice(insertAt, 0, moved);
 
             // 将新的可见顺序合并回完整排序（只改可见项的相对位置）
-            const fullOrder = getPersonaOrder();
+            // 使用拖拽开始时捕获的 orderKey，避免角色切换导致存错位置
+            const obj = ensurePersonaOrderObj();
+            const fullOrder = obj[orderKey] || [];
             const visibleSet = new Set(avatarIds);
             const merged = [];
             let vi = 0;
@@ -1302,11 +1356,11 @@ jQuery(async () => {
                     merged.push(id);
                 }
             }
-            // 追加 fullOrder 中没有的新项
             for (; vi < newVisible.length; vi++) {
                 merged.push(newVisible[vi]);
             }
-            savePersonaOrder(merged);
+            obj[orderKey] = merged;
+            saveSettings();
         }
 
         personaDragState = null;
@@ -1591,6 +1645,7 @@ jQuery(async () => {
         if (block) {
             new MutationObserver(() => {
                 if (isOwnRender) return;
+                if (personaDragState) return;
                 handlePendingDuplication();
                 clearTimeout(takeoverDebounce);
                 takeoverDebounce = setTimeout(() => {

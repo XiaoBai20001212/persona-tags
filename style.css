@@ -443,7 +443,11 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
 
 #user_avatar_block .avatar-container {
     position: relative;
-    touch-action: none;
+    touch-action: pan-y;
+}
+
+#user_avatar_block .avatar-container img {
+    -webkit-touch-callout: none;
 }
 
 .persona-card-selected {
