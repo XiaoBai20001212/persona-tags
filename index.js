@@ -61,6 +61,7 @@ jQuery(async () => {
 
     // ===== 服务器头像列表缓存（分页下 DOM 不完整，需用服务器列表作权威来源） =====
     let serverAvatarSet = null;
+    let serverAvatarList = [];
 
     async function refreshServerAvatars() {
         try {
@@ -72,6 +73,7 @@ jQuery(async () => {
             if (response.ok) {
                 const list = await response.json();
                 if (Array.isArray(list)) {
+                    serverAvatarList = list;
                     serverAvatarSet = new Set(list);
                     console.log(LOG, 'Server avatar cache refreshed:', serverAvatarSet.size, 'avatars');
                 }
@@ -215,6 +217,7 @@ jQuery(async () => {
         if (!targetId) return null;
 
         const descriptions = ctx.powerUserSettings.persona_descriptions;
+        if (!descriptions) return [];
         const connected = [];
         for (const [avatarId, desc] of Object.entries(descriptions)) {
             const connections = desc?.connections ?? [];
@@ -279,7 +282,7 @@ jQuery(async () => {
                     removeTagFromPersona(avatarId, tag);
                     renderTagEditor(avatarId);
                     renderFilterArea();
-                    applyDomFilter();
+                    applyFiltersAndRender();
                 });
                 $tag.append($remove);
                 $list.append($tag);
@@ -331,7 +334,7 @@ jQuery(async () => {
                 $input.val('');
                 renderTagEditor(currentPersonaAvatar);
                 renderFilterArea();
-                renderCardTags();
+                applyFiltersAndRender();
             }
             if (duplicated > 0 && added === 0) {
                 toastr.warning('标签已存在');
@@ -358,18 +361,34 @@ jQuery(async () => {
                     <i class="fa-solid fa-users"></i> 全部人设
                 </span>
                 <span class="persona-view-mode-info"></span>
+                <span class="persona-view-mode-btn persona-refresh-btn" title="刷新人设列表">
+                    <i class="fa-solid fa-rotate"></i>
+                </span>
             </div>
         `;
         $searchRow.after(html);
 
-        // 点击切换
-        $(document).on('click', '.persona-view-mode-btn', function () {
+        // 点击切换视图模式（命名空间防止重复绑定）
+        $(document).off('click.ptViewMode').on('click.ptViewMode', '.persona-view-mode-btn[data-mode]', function () {
             const mode = $(this).attr('data-mode');
             viewMode = mode;
-            $('.persona-view-mode-btn').removeClass('active');
+            $('.persona-view-mode-btn[data-mode]').removeClass('active');
             $(this).addClass('active');
             updateViewModeInfo();
-            applyDomFilter();
+            applyFiltersAndRender();
+        });
+
+        // 刷新按钮
+        $(document).off('click.ptRefresh').on('click.ptRefresh', '.persona-refresh-btn', async function () {
+            const $icon = $(this).find('i');
+            $icon.addClass('fa-spin');
+            await refreshServerAvatars();
+            purgeOrphanedSTEntries();
+            applyFiltersAndRender();
+            renderFilterArea();
+            updateViewModeInfo();
+            $icon.removeClass('fa-spin');
+            toastr.success('已刷新');
         });
 
         updateViewModeInfo();
@@ -447,7 +466,7 @@ jQuery(async () => {
         $clear.on('click', () => {
             activeFilters.clear();
             renderFilterArea();
-            applyDomFilter();
+            applyFiltersAndRender();
         });
         $list.append($clear);
 
@@ -458,7 +477,7 @@ jQuery(async () => {
         $modeBtn.on('click', () => {
             filterMode = filterMode === 'include' ? 'exclude' : 'include';
             renderFilterArea();
-            applyDomFilter();
+            applyFiltersAndRender();
         });
         $list.append($modeBtn);
 
@@ -489,7 +508,7 @@ jQuery(async () => {
                     activeFilters.add(tag);
                 }
                 renderFilterArea();
-                applyDomFilter();
+                applyFiltersAndRender();
             });
             $list.append($btn);
         }
@@ -630,63 +649,421 @@ jQuery(async () => {
         dragState = null;
         isDragging = false;
         renderFilterArea();
-        applyDomFilter();
+        applyFiltersAndRender();
     }
 
-    // ===== 在人设卡片上显示标签 =====
-    function renderCardTags() {
-        $('#user_avatar_block .avatar-container').each(function () {
-            const avatarId = $(this).attr('data-avatar-id');
-            if (!avatarId) return;
+    // ===== 批量选中状态 =====
+    const selectedAvatars = new Set();
 
-            $(this).find('.persona-card-tags').remove();
-
-            const tags = getPersonaTags(avatarId);
-            if (tags.length === 0) return;
-
-            const $container = $('<span class="persona-card-tags"></span>');
-            for (const tag of tags) {
-                const color = getTagColor(tag);
-                const $tag = $('<span class="persona-card-tag"></span>')
-                    .css({ background: color.bg, color: color.fg })
-                    .text(tag);
-                $container.append($tag);
-            }
-            $(this).find('.ch_description').after($container);
-        });
+    function toggleSelection(avatarId) {
+        if (selectedAvatars.has(avatarId)) selectedAvatars.delete(avatarId);
+        else selectedAvatars.add(avatarId);
+        applyFiltersAndRender();
+        renderBatchToolbar();
     }
 
-    // ===== DOM 筛选（隐藏/显示人设卡片） =====
-    function applyDomFilter() {
-        const connectedPersonas = (viewMode === 'connected') ? getConnectedPersonas() : null;
+    function selectAllVisible() {
+        const filtered = applyFilters(serverAvatarList);
+        for (const id of filtered) selectedAvatars.add(id);
+        applyFiltersAndRender();
+        renderBatchToolbar();
+    }
 
-        $('#user_avatar_block .avatar-container').each(function () {
-            const avatarId = $(this).attr('data-avatar-id');
-            if (!avatarId) return;
+    function deselectAll() {
+        selectedAvatars.clear();
+        applyFiltersAndRender();
+        renderBatchToolbar();
+    }
 
-            let visible = true;
+    function pruneSelection(visibleIds) {
+        for (const id of [...selectedAvatars]) {
+            if (!visibleIds.includes(id)) selectedAvatars.delete(id);
+        }
+    }
 
-            // 第一层：绑定关系筛选
-            if (connectedPersonas !== null) {
-                visible = connectedPersonas.includes(avatarId);
-            }
+    // ===== 批量操作工具栏 =====
+    function renderBatchToolbar() {
+        let $toolbar = $('#persona-batch-toolbar');
 
-            // 第二层：标签筛选
-            if (visible && activeFilters.size > 0) {
-                const tags = getPersonaTags(avatarId);
-                if (filterMode === 'include') {
-                    // 正向：必须包含所有选中标签（AND）
-                    visible = [...activeFilters].every(f => tags.includes(f));
-                } else {
-                    // 反向：有任意一个选中标签就隐藏
-                    visible = ![...activeFilters].some(f => tags.includes(f));
+        if (selectedAvatars.size === 0) {
+            $toolbar.remove();
+            return;
+        }
+
+        if (!$toolbar.length) {
+            $toolbar = $('<div id="persona-batch-toolbar" class="persona-batch-toolbar"></div>');
+            const $block = $('#user_avatar_block');
+            if ($block.length) $block.before($toolbar);
+            else return;
+        }
+
+        $toolbar.empty();
+
+        // 选中计数
+        $toolbar.append($('<span class="persona-batch-count"></span>').text(`已选 ${selectedAvatars.size} 个`));
+
+        // 全选
+        const $selectAll = $('<span class="persona-batch-btn"><i class="fa-solid fa-check-double"></i> 全选</span>');
+        $selectAll.on('click', selectAllVisible);
+        $toolbar.append($selectAll);
+
+        // 取消
+        const $deselect = $('<span class="persona-batch-btn"><i class="fa-solid fa-xmark"></i> 取消</span>');
+        $deselect.on('click', deselectAll);
+        $toolbar.append($deselect);
+
+        // 分隔符
+        $toolbar.append('<span class="persona-batch-separator">|</span>');
+
+        // 批量打标签
+        const $addTags = $('<span class="persona-batch-btn"><i class="fa-solid fa-tags"></i> 打标签</span>');
+        $addTags.on('click', batchAddTags);
+        $toolbar.append($addTags);
+
+        // 批量删标签
+        const $removeTags = $('<span class="persona-batch-btn"><i class="fa-solid fa-tag"></i> 删标签</span>');
+        $removeTags.on('click', batchRemoveTags);
+        $toolbar.append($removeTags);
+
+        // 批量删除
+        const $del = $('<span class="persona-batch-btn persona-batch-btn-danger"><i class="fa-solid fa-trash"></i> 删除</span>');
+        $del.on('click', batchDelete);
+        $toolbar.append($del);
+    }
+
+    // ===== 批量操作 =====
+    async function batchAddTags() {
+        if (selectedAvatars.size === 0) return;
+        const input = await showBatchInput('批量打标签', `给 ${selectedAvatars.size} 个人设添加标签（逗号分隔多个）：`);
+        if (!input) return;
+        const parts = input.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+        if (parts.length === 0) return;
+        let totalAdded = 0;
+        try {
+            for (const avatarId of selectedAvatars) {
+                for (const tag of parts) {
+                    if (addTagToPersona(avatarId, tag)) totalAdded++;
                 }
             }
+        } catch (e) {
+            console.error(LOG, 'Batch add tags error:', e);
+            toastr.error('批量打标签出错');
+        }
+        if (totalAdded > 0) {
+            toastr.success(`已添加 ${totalAdded} 条标签`);
+            applyFiltersAndRender();
+            renderFilterArea();
+        } else {
+            toastr.warning('所有标签已存在');
+        }
+    }
 
-            $(this).toggleClass('persona-tag-hidden', !visible);
+    async function batchRemoveTags() {
+        if (selectedAvatars.size === 0) return;
+        // 收集选中人设的所有标签
+        const tagCounts = {};
+        for (const avatarId of selectedAvatars) {
+            for (const tag of getPersonaTags(avatarId)) {
+                tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+            }
+        }
+        const allTags = Object.keys(tagCounts);
+        if (allTags.length === 0) {
+            toastr.warning('选中的人设没有标签');
+            return;
+        }
+        const toRemove = await showBatchTagPicker('批量删标签', `从 ${selectedAvatars.size} 个人设中移除标签：`, allTags, tagCounts);
+        if (!toRemove || toRemove.length === 0) return;
+        let totalRemoved = 0;
+        try {
+            for (const avatarId of selectedAvatars) {
+                for (const tag of toRemove) {
+                    if (getPersonaTags(avatarId).includes(tag)) {
+                        removeTagFromPersona(avatarId, tag);
+                        totalRemoved++;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error(LOG, 'Batch remove tags error:', e);
+            toastr.error('批量删标签出错');
+        }
+        if (totalRemoved > 0) {
+            toastr.success(`已移除 ${totalRemoved} 条标签`);
+            applyFiltersAndRender();
+            renderFilterArea();
+            const cur = detectCurrentPersona();
+            if (cur) renderTagEditor(cur);
+        }
+    }
+
+    async function batchDelete() {
+        if (selectedAvatars.size === 0) return;
+        const ctx = SillyTavern.getContext();
+        const names = [...selectedAvatars].map(id => ctx.powerUserSettings.personas?.[id] || id).join('、');
+        const confirmed = confirm(`确定要删除 ${selectedAvatars.size} 个人设吗？\n\n${names}\n\n此操作不可撤销！`);
+        if (!confirmed) return;
+
+        let deleted = 0;
+        for (const avatarId of [...selectedAvatars]) {
+            try {
+                const resp = await fetch('/api/avatars/delete', {
+                    method: 'POST',
+                    headers: ctx.getRequestHeaders(),
+                    body: JSON.stringify({ avatar: avatarId }),
+                });
+                if (resp.ok) {
+                    if (ctx.powerUserSettings.personas) delete ctx.powerUserSettings.personas[avatarId];
+                    if (ctx.powerUserSettings.persona_descriptions) delete ctx.powerUserSettings.persona_descriptions[avatarId];
+                    selectedAvatars.delete(avatarId);
+                    deleted++;
+                }
+            } catch (e) {
+                console.error(LOG, 'Failed to delete:', avatarId, e);
+            }
+        }
+
+        if (deleted > 0) {
+            saveSettings();
+            await refreshServerAvatars();
+            purgeOrphanedEntries();
+            applyFiltersAndRender();
+            renderFilterArea();
+            renderBatchToolbar();
+            toastr.success(`已删除 ${deleted} 个人设`);
+        }
+    }
+
+    // 批量操作辅助弹窗：文字输入
+    function showBatchInput(title, message) {
+        return new Promise(resolve => {
+            const $overlay = $('<div class="persona-batch-overlay"></div>');
+            const $dialog = $(`<div class="persona-batch-dialog">
+                <div class="persona-batch-dialog-title">${title}</div>
+                <div class="persona-batch-dialog-msg">${message}</div>
+                <form class="persona-batch-dialog-form" autocomplete="off">
+                    <input type="text" class="text_pole persona-batch-dialog-input" placeholder="标签1, 标签2, ..." enterkeyhint="done">
+                </form>
+                <div class="persona-batch-dialog-buttons">
+                    <span class="persona-batch-btn persona-batch-dialog-cancel">取消</span>
+                    <span class="persona-batch-btn persona-batch-dialog-ok">确定</span>
+                </div>
+            </div>`);
+            $overlay.append($dialog);
+            $('body').append($overlay);
+
+            const close = (val) => { $overlay.remove(); resolve(val); };
+
+            $dialog.find('.persona-batch-dialog-cancel').on('click', () => close(null));
+            $overlay.on('click', (e) => { if (e.target === $overlay[0]) close(null); });
+            $dialog.find('.persona-batch-dialog-form').on('submit', (e) => {
+                e.preventDefault();
+                close($dialog.find('.persona-batch-dialog-input').val().trim());
+            });
+            $dialog.find('.persona-batch-dialog-ok').on('click', () => {
+                close($dialog.find('.persona-batch-dialog-input').val().trim());
+            });
+
+            setTimeout(() => $dialog.find('.persona-batch-dialog-input').focus(), 50);
+        });
+    }
+
+    // 批量操作辅助弹窗：标签选择器
+    function showBatchTagPicker(title, message, tags, tagCounts) {
+        return new Promise(resolve => {
+            const $overlay = $('<div class="persona-batch-overlay"></div>');
+            const $dialog = $(`<div class="persona-batch-dialog">
+                <div class="persona-batch-dialog-title">${title}</div>
+                <div class="persona-batch-dialog-msg">${message}</div>
+                <div class="persona-batch-tag-picker"></div>
+                <div class="persona-batch-dialog-buttons">
+                    <span class="persona-batch-btn persona-batch-dialog-cancel">取消</span>
+                    <span class="persona-batch-btn persona-batch-dialog-ok">移除选中</span>
+                </div>
+            </div>`);
+
+            const picked = new Set();
+            const $picker = $dialog.find('.persona-batch-tag-picker');
+            for (const tag of tags) {
+                const color = getTagColor(tag);
+                const $pill = $('<span class="persona-batch-tag-pill"></span>')
+                    .css({ background: color.bg, color: color.fg })
+                    .text(`${tag} (${tagCounts[tag]})`)
+                    .attr('data-tag', tag);
+                $pill.on('click', () => {
+                    if (picked.has(tag)) { picked.delete(tag); $pill.removeClass('picked'); }
+                    else { picked.add(tag); $pill.addClass('picked'); }
+                });
+                $picker.append($pill);
+            }
+
+            $overlay.append($dialog);
+            $('body').append($overlay);
+
+            const close = (val) => { $overlay.remove(); resolve(val); };
+            $dialog.find('.persona-batch-dialog-cancel').on('click', () => close(null));
+            $overlay.on('click', (e) => { if (e.target === $overlay[0]) close(null); });
+            $dialog.find('.persona-batch-dialog-ok').on('click', () => close([...picked]));
+        });
+    }
+
+    // ===== 纯数据筛选（不操作 DOM） =====
+    function applyFilters(avatarList) {
+        const ctx = SillyTavern.getContext();
+        let result = [...avatarList];
+
+        // 搜索过滤（读取 ST 的搜索框）
+        const searchTerm = ($('#persona_search_bar').val() || '').trim().toLowerCase();
+        if (searchTerm) {
+            result = result.filter(avatarId => {
+                const name = (ctx.powerUserSettings.personas?.[avatarId] || '').toLowerCase();
+                const desc = (ctx.powerUserSettings.persona_descriptions?.[avatarId]?.description || '').toLowerCase();
+                return name.includes(searchTerm) || desc.includes(searchTerm);
+            });
+        }
+
+        // 视图模式过滤
+        const connectedPersonas = (viewMode === 'connected') ? getConnectedPersonas() : null;
+        if (connectedPersonas !== null) {
+            result = result.filter(avatarId => connectedPersonas.includes(avatarId));
+        }
+
+        // 标签过滤
+        if (activeFilters.size > 0) {
+            result = result.filter(avatarId => {
+                const tags = getPersonaTags(avatarId);
+                if (filterMode === 'include') {
+                    return [...activeFilters].every(f => tags.includes(f));
+                } else {
+                    return ![...activeFilters].some(f => tags.includes(f));
+                }
+            });
+        }
+
+        // 按名称排序
+        result.sort((a, b) => {
+            const nameA = ctx.powerUserSettings.personas?.[a] || a;
+            const nameB = ctx.powerUserSettings.personas?.[b] || b;
+            return nameA.localeCompare(nameB);
         });
 
-        renderCardTags();
+        return result;
+    }
+
+    // ===== 接管渲染 =====
+    let isOwnRender = false;
+
+    function getThumbnailUrl(avatarId) {
+        return `/thumbnail?type=persona&file=${encodeURIComponent(avatarId)}`;
+    }
+
+    function buildPersonaCard(avatarId) {
+        const ctx = SillyTavern.getContext();
+        const personaName = ctx.powerUserSettings.personas?.[avatarId] || '[未命名人设]';
+        const desc = ctx.powerUserSettings.persona_descriptions?.[avatarId]?.description || '';
+        const title = ctx.powerUserSettings.persona_descriptions?.[avatarId]?.title || '';
+        const noDescText = $('#user_avatar_block').attr('no_desc_text') || '';
+
+        const $card = $('<div class="avatar-container interactable"></div>').attr('data-avatar-id', avatarId).attr('tabindex', '0');
+
+        // 批量选中复选框
+        const isChecked = selectedAvatars.has(avatarId);
+        const $checkWrap = $('<label class="persona-card-checkbox-wrap"></label>');
+        const $check = $('<input type="checkbox" class="persona-card-checkbox">').prop('checked', isChecked);
+        $checkWrap.on('click', (e) => e.stopPropagation());
+        $check.on('change', () => toggleSelection(avatarId));
+        $checkWrap.append($check);
+        $card.append($checkWrap);
+        $card.toggleClass('persona-card-selected', isChecked);
+
+        // 头像
+        const $avatar = $('<div class="avatar"></div>').attr('data-avatar-id', avatarId).attr('title', avatarId);
+        $avatar.append($('<img>').attr('src', getThumbnailUrl(avatarId)).attr('alt', 'User Avatar'));
+        $card.append($avatar);
+
+        // 信息容器
+        const $info = $('<div class="flex-container wide100pLess70px character_select_container"></div>');
+
+        // 名称 + 标题
+        const $nameBlock = $('<div class="wide100p character_name_block"></div>');
+        $nameBlock.append($('<span class="ch_name flex1"></span>').text(personaName));
+        $nameBlock.append($('<small class="ch_additional_info"></small>').text(title));
+        $info.append($nameBlock);
+
+        // 描述
+        let displayDesc = desc || noDescText;
+        if (displayDesc.split('\n').length < 3) displayDesc += '\n\xa0\n\xa0';
+        $info.append($('<div class="ch_description"></div>').text(displayDesc).toggleClass('text_muted', !desc));
+
+        // 标签（直接内嵌，替代旧的 renderCardTags）
+        const tags = getPersonaTags(avatarId);
+        if (tags.length > 0) {
+            const $tags = $('<span class="persona-card-tags"></span>');
+            for (const tag of tags) {
+                const color = getTagColor(tag);
+                $tags.append($('<span class="persona-card-tag"></span>').css({ background: color.bg, color: color.fg }).text(tag));
+            }
+            $info.append($tags);
+        }
+
+        // 锁定状态标签（保留 ST 原生结构，主题 CSS 兼容）
+        $info.append(`<div class="avatar_container_states buttons_block">
+            <div class="locked_to_chat_label avatar_state has_hover_label menu_button menu_button_icon disabled">
+                <i class="icon fa-solid fa-lock fa-fw"></i>
+                <i class="label_icon icon fa-solid fa-comments fa-fw"></i>
+                <div class="label">Chat</div>
+            </div>
+            <div class="locked_to_character_label avatar_state has_hover_label menu_button menu_button_icon disabled">
+                <i class="icon fa-solid fa-lock fa-fw"></i>
+                <i class="label_icon icon fa-solid fa-user fa-fw"></i>
+                <div class="label">Character</div>
+            </div>
+        </div>`);
+
+        $card.append($info);
+
+        // 人设状态 class
+        $card.toggleClass('default_persona', avatarId === ctx.powerUserSettings.default_persona);
+        $card.toggleClass('selected', avatarId === currentPersonaAvatar);
+        const chatPersona = ctx.chat_metadata?.persona;
+        $card.toggleClass('locked_to_chat', chatPersona === avatarId);
+        const connections = ctx.powerUserSettings.persona_descriptions?.[avatarId]?.connections || [];
+        let isCharLocked = false;
+        if (ctx.groupId) {
+            isCharLocked = connections.some(c => c.type === 'group' && c.id === ctx.groupId);
+        } else if (ctx.characterId != null) {
+            const charAvatar = ctx.characters?.[ctx.characterId]?.avatar;
+            isCharLocked = charAvatar && connections.some(c => c.type === 'character' && c.id === charAvatar);
+        }
+        $card.toggleClass('locked_to_character', isCharLocked);
+
+        return $card;
+    }
+
+    function renderPersonaList(filteredList) {
+        const $block = $('#user_avatar_block');
+        if (!$block.length) return;
+
+        isOwnRender = true;
+        $block.empty();
+
+        if (filteredList.length === 0) {
+            $block.append('<div class="persona-empty-placeholder">暂无匹配的人设</div>');
+        } else {
+            for (const avatarId of filteredList) {
+                $block.append(buildPersonaCard(avatarId));
+            }
+        }
+
+        setTimeout(() => { isOwnRender = false; }, 0);
+    }
+
+    function applyFiltersAndRender() {
+        if (serverAvatarList.length === 0) return;
+        const filtered = applyFilters(serverAvatarList);
+        pruneSelection(filtered);
+        renderPersonaList(filtered);
+        renderBatchToolbar();
     }
 
     // ===== 工具函数 =====
@@ -781,6 +1158,11 @@ jQuery(async () => {
 
     function handlePendingDuplication() {
         if (!pendingDuplication) return;
+        if (Date.now() - pendingDuplication.timestamp > 30000) {
+            console.log(LOG, 'Pending duplication expired');
+            pendingDuplication = null;
+            return;
+        }
 
         const ctx = SillyTavern.getContext();
         const currentIds = new Set(Object.keys(ctx.powerUserSettings.personas));
@@ -900,11 +1282,16 @@ jQuery(async () => {
         purgeOrphanedSTEntries();
         injectTagEditor();
         injectViewModeToggle();
-        renderFilterArea();
         startPopupObserver();
 
-        const cur = detectCurrentPersona();
-        if (cur) renderTagEditor(cur);
+        // 记录当前选中的人设（在接管渲染前从 DOM 读取）
+        currentPersonaAvatar = detectCurrentPersona();
+
+        // 初次接管渲染
+        applyFiltersAndRender();
+        renderFilterArea();
+
+        if (currentPersonaAvatar) renderTagEditor(currentPersonaAvatar);
 
         // 如果当前没有角色卡，默认切到"全部"模式
         if (getConnectedPersonas() === null) {
@@ -914,10 +1301,23 @@ jQuery(async () => {
             updateViewModeInfo();
         }
 
-        // 监听人设选择点击
-        $(document).on('click', '#user_avatar_block .avatar-container', function () {
+        // 监听人设选择点击（更新当前人设跟踪 + 右栏标签编辑器）
+        $(document).on('click', '#user_avatar_block .avatar-container', function (e) {
+            // 复选框点击不触发选中（Phase C 会用到）
+            if ($(e.target).closest('.persona-card-checkbox-wrap').length) return;
             const avatarId = $(this).attr('data-avatar-id');
-            setTimeout(() => renderTagEditor(avatarId), 100);
+            currentPersonaAvatar = avatarId;
+            setTimeout(() => {
+                applyFiltersAndRender();
+                renderTagEditor(avatarId);
+            }, 100);
+        });
+
+        // 监听搜索框输入，用我们的渲染响应
+        let searchDebounce = null;
+        $(document).on('input', '#persona_search_bar', () => {
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(() => applyFiltersAndRender(), 150);
         });
 
         // 监听复制按钮：捕获阶段优先于 ST 的处理，确保 pendingDuplication 先被设置
@@ -932,23 +1332,23 @@ jQuery(async () => {
                 copyTags: false,
                 copyConnections: false,
                 existingIds: new Set(Object.keys(ctx.powerUserSettings.personas)),
+                timestamp: Date.now(),
             };
             console.log(LOG, 'Pending duplication set for:', sourceAvatarId);
         }, true); // 捕获阶段
 
-        // MutationObserver：人设列表重新渲染时重新应用
-        let mutationDebounceTimer = null;
+        // MutationObserver：接管渲染 — 拦截 ST 的重绘，替换为我们的卡片
+        let takeoverDebounce = null;
         const block = document.getElementById('user_avatar_block');
         if (block) {
             new MutationObserver(() => {
+                if (isOwnRender) return;
                 handlePendingDuplication();
-                renderCardTags();
-                applyDomFilter();
-                // 防抖刷新筛选区（DOM 重新渲染会触发多次 mutation）
-                if (mutationDebounceTimer) clearTimeout(mutationDebounceTimer);
-                mutationDebounceTimer = setTimeout(() => {
+                clearTimeout(takeoverDebounce);
+                takeoverDebounce = setTimeout(() => {
+                    applyFiltersAndRender();
                     renderFilterArea();
-                }, 200);
+                }, 50);
             }).observe(block, { childList: true });
         }
 
@@ -974,17 +1374,8 @@ jQuery(async () => {
             deleteCleanupTimer = setTimeout(async () => {
                 await refreshServerAvatars();
                 purgeOrphanedSTEntries();
-                // ST 连续删除时可能不重新渲染 DOM，手动移除已删除的卡片
-                if (serverAvatarSet) {
-                    $('#user_avatar_block .avatar-container').each(function () {
-                        const avatarId = $(this).attr('data-avatar-id');
-                        if (avatarId && !serverAvatarSet.has(avatarId)) {
-                            $(this).remove();
-                        }
-                    });
-                }
+                applyFiltersAndRender();
                 renderFilterArea();
-                applyDomFilter();
                 const cur = detectCurrentPersona();
                 renderTagEditor(cur);
                 console.log(LOG, 'Post-delete cleanup done');
@@ -1006,7 +1397,7 @@ jQuery(async () => {
                 updateViewModeInfo();
                 const cur = detectCurrentPersona();
                 if (cur) renderTagEditor(cur);
-                applyDomFilter();
+                applyFiltersAndRender();
             }, 300);
         });
 

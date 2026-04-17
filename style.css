@@ -109,28 +109,6 @@
     font-weight: bold;
 }
 
-.persona-filter-selected-pills {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 3px;
-    margin-left: 4px;
-    align-items: center;
-}
-
-.persona-filter-selected-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    padding: 1px 7px;
-    border-radius: 8px;
-    font-size: 0.75em;
-    line-height: 1.4;
-    cursor: pointer;
-}
-
-.persona-filter-selected-pill:hover {
-    opacity: 0.7;
-}
 
 .persona-filter-dropdown-panel {
     display: none;
@@ -161,6 +139,7 @@
     opacity: 0.45;
     user-select: none;
     border: 2px solid transparent;
+    touch-action: none;
 }
 
 .persona-tag-filter-btn:hover {
@@ -181,9 +160,6 @@
 }
 
 /* --- Tag Drag & Drop --- */
-.persona-tag-filter-btn {
-    touch-action: none;
-}
 
 .persona-filter-dropdown-list .persona-tag-filter-btn {
     transition: opacity 0.15s, border-color 0.15s, box-shadow 0.15s;
@@ -200,11 +176,11 @@
 }
 
 .persona-tag-drop-left {
-    box-shadow: -3px 0 0 0 #fff !important;
+    box-shadow: -3px 0 0 0 var(--SmartThemeBodyColor) !important;
 }
 
 .persona-tag-drop-right {
-    box-shadow: 3px 0 0 0 #fff !important;
+    box-shadow: 3px 0 0 0 var(--SmartThemeBodyColor) !important;
 }
 
 .persona-tag-clear-btn {
@@ -282,10 +258,6 @@
     color: var(--SmartThemeBodyColor);
 }
 
-/* --- DOM-based filter: hide non-matching personas --- */
-.persona-tag-hidden {
-    display: none !important;
-}
 
 /* --- Card-level tag display (on each persona card in the list) --- */
 .persona-card-tags {
@@ -419,5 +391,191 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
     width: 16px;
     height: 16px;
     cursor: pointer;
+}
+
+/* --- Takeover: Hide ST native controls --- */
+#persona_pagination_container {
+    visibility: hidden;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* --- Card Checkbox --- */
+.persona-card-checkbox-wrap {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+}
+
+.persona-card-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--SmartThemeBodyColor);
+}
+
+@media (pointer: coarse) {
+    .persona-card-checkbox-wrap {
+        width: 44px;
+        height: 44px;
+    }
+    .persona-card-checkbox {
+        width: 22px;
+        height: 22px;
+    }
+}
+
+#user_avatar_block .avatar-container {
+    position: relative;
+}
+
+.persona-card-selected {
+    outline: 2px solid var(--SmartThemeBodyColor) !important;
+    outline-offset: -2px;
+}
+
+/* --- Batch Toolbar --- */
+.persona-batch-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    margin: 4px 0;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background: var(--SmartThemeBlurTintColor);
+    font-size: 0.82em;
+    color: var(--SmartThemeBodyColor);
+}
+
+.persona-batch-count {
+    font-weight: bold;
+    margin-right: 4px;
+}
+
+.persona-batch-btn {
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    transition: opacity 0.2s;
+    opacity: 0.7;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.persona-batch-btn:hover {
+    opacity: 1;
+}
+
+.persona-batch-btn-danger {
+    color: #e74c3c;
+    border-color: rgba(231, 76, 60, 0.4);
+}
+
+.persona-batch-btn-danger:hover {
+    background: rgba(231, 76, 60, 0.15);
+}
+
+.persona-batch-separator {
+    opacity: 0.3;
+    user-select: none;
+}
+
+/* --- Batch Dialog Overlay --- */
+.persona-batch-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.persona-batch-dialog {
+    background: var(--SmartThemeBlurTintColor, #222);
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    border-radius: 10px;
+    padding: 16px;
+    min-width: 280px;
+    max-width: 90vw;
+    color: var(--SmartThemeBodyColor, #eee);
+}
+
+.persona-batch-dialog-title {
+    font-weight: bold;
+    font-size: 1.05em;
+    margin-bottom: 8px;
+}
+
+.persona-batch-dialog-msg {
+    font-size: 0.88em;
+    opacity: 0.8;
+    margin-bottom: 10px;
+}
+
+.persona-batch-dialog-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 0.9em;
+    margin-bottom: 10px;
+}
+
+.persona-batch-dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* --- Batch Tag Picker --- */
+.persona-batch-tag-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 12px;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.persona-batch-tag-pill {
+    cursor: pointer;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.82em;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+    user-select: none;
+    border: 2px solid transparent;
+}
+
+.persona-batch-tag-pill:hover {
+    opacity: 0.75;
+}
+
+.persona-batch-tag-pill.picked {
+    opacity: 1;
+    border-color: var(--SmartThemeBodyColor);
+    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Empty list placeholder --- */
+.persona-empty-placeholder {
+    text-align: center;
+    padding: 20px 10px;
+    font-size: 0.9em;
+    opacity: 0.6;
+    color: var(--SmartThemeBodyColor);
+    font-style: italic;
 }
 
