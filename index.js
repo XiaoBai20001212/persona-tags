@@ -1536,7 +1536,7 @@ jQuery(async () => {
         }
     }
 
-    function handlePendingCreationTags() {
+    async function handlePendingCreationTags() {
         if (!pendingCreationTags) return;
         if (Date.now() - pendingCreationTags.timestamp > 30000) {
             pendingCreationTags = null;
@@ -1551,6 +1551,9 @@ jQuery(async () => {
                 }
                 console.log(LOG, 'Applied creation tags to new persona:', id, pendingCreationTags.tags);
                 pendingCreationTags = null;
+                await refreshServerAvatars();
+                applyFiltersAndRender();
+                renderFilterArea();
                 return;
             }
         }
