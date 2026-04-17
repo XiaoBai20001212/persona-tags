@@ -464,8 +464,8 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
 /* --- Position Badge --- */
 .persona-position-badge {
     position: absolute;
-    top: 2px;
-    right: 4px;
+    bottom: 2px;
+    left: 4px;
     z-index: 5;
     background: rgba(0, 0, 0, 0.5);
     color: #fff;
