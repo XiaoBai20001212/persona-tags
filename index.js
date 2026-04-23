@@ -532,6 +532,7 @@ jQuery(async () => {
             $icon.addClass('fa-spin');
             const ok = await refreshServerAvatars();
             purgeOrphanedSTEntries();
+            purgeOrphanedEntries();
             applyFiltersAndRender();
             renderFilterArea();
             updateViewModeInfo();
@@ -1926,6 +1927,7 @@ jQuery(async () => {
         getSettings();
         await refreshServerAvatars();
         purgeOrphanedSTEntries();
+        purgeOrphanedEntries();
         purgeOrphanedOrders();
         setupBackupRestoreHooks();
         injectTagEditor();
@@ -2041,6 +2043,7 @@ jQuery(async () => {
             deleteCleanupTimer = setTimeout(async () => {
                 await refreshServerAvatars();
                 purgeOrphanedSTEntries();
+                purgeOrphanedEntries();
                 applyFiltersAndRender();
                 renderFilterArea();
                 const cur = detectCurrentPersona();
@@ -2054,6 +2057,7 @@ jQuery(async () => {
             setTimeout(async () => {
                 await refreshServerAvatars();
                 purgeOrphanedSTEntries();
+                purgeOrphanedEntries();
                 if (!$('#persona-tags-editor-section').length) {
                     injectTagEditor();
                 }
