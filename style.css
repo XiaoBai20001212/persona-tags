@@ -461,26 +461,12 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
     outline-offset: -2px;
 }
 
-/* --- Position Badge --- */
+/* --- Position Badge (inline after name) --- */
 .persona-position-badge {
-    position: absolute;
-    bottom: 2px;
-    left: 4px;
-}
-
-#user_avatar_block.gridView .persona-position-badge {
-    top: 2px;
-    right: 4px;
-    bottom: auto;
-    left: auto;
-    z-index: 5;
-    background: rgba(0, 0, 0, 0.5);
-    color: #fff;
-    font-size: 0.68em;
-    padding: 1px 5px;
-    border-radius: 6px;
-    pointer-events: none;
-    line-height: 1.4;
+    font-size: 0.8em;
+    opacity: 0.45;
+    margin-left: 3px;
+    font-weight: normal;
 }
 
 /* --- Position Editor (Right Column) --- */
