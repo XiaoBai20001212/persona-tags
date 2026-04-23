@@ -1267,7 +1267,7 @@ jQuery(async () => {
     }
 
     function applyFiltersAndRender() {
-        if (serverAvatarList.length === 0) return;
+        if (!serverAvatarSet) return;
         const contextList = getContextList();
         const filtered = applyFilters(contextList);
         pruneSelection(filtered);
