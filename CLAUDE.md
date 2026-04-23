@@ -64,6 +64,15 @@ personaOrder: {
 
 `startPopupObserver` 用 MutationObserver 监听 `document.body`，检测 ST 的原生弹窗并翻译为中文。有 `requestAnimationFrame` 防抖 + `addedNodes` 过滤避免性能问题。创建人设弹窗还会注入标签输入框。
 
+### 备份/恢复增强
+
+`setupBackupRestoreHooks` 用原生 capture-phase 事件监听器拦截 ST 的备份/恢复按钮（ST 用 jQuery bubble-phase 绑定）。
+
+- **备份**：拦截 `#personas_backup` click → 生成包含 `personaTags` 字段的增强 JSON → 浏览器下载
+- **恢复**：拦截 `#personas_restore_input` change → 异步读文件提取 `personaTags` → `mergePersonaTagsData` 合并到现有设置 → `$(input).trigger('change')` 放行给 ST 处理标准数据
+
+合并策略：tagMap 做 union 去重，tagOrder 追加新标签，personaOrder 按 key skip 已有。导出的 JSON 向后兼容——无插件的 ST 恢复时自动忽略 `personaTags` 字段。
+
 ### 孤儿数据清理
 
 - `purgeOrphanedEntries` — 清理 tagMap 里已删人设的条目
