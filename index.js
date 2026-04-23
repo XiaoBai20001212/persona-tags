@@ -1462,6 +1462,137 @@ jQuery(async () => {
         });
     }
 
+    // ===== 备份/恢复增强 =====
+
+    function downloadFile(jsonStr, filename) {
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function mergePersonaTagsData(incoming) {
+        if (!incoming || typeof incoming !== 'object') return 0;
+        const settings = getSettings();
+        let count = 0;
+
+        // tagMap: union 合并（现有标签在前，新标签追加）
+        if (incoming.tagMap && typeof incoming.tagMap === 'object') {
+            for (const [avatarId, tags] of Object.entries(incoming.tagMap)) {
+                if (!Array.isArray(tags)) continue;
+                const existing = settings.tagMap[avatarId] || [];
+                const existingSet = new Set(existing);
+                const merged = [...existing];
+                for (const rawTag of tags) {
+                    if (typeof rawTag !== 'string') continue;
+                    const tag = rawTag.trim();
+                    if (tag && !existingSet.has(tag)) {
+                        merged.push(tag);
+                        existingSet.add(tag);
+                    }
+                }
+                if (merged.length > existing.length) {
+                    settings.tagMap[avatarId] = merged;
+                    count++;
+                }
+            }
+        }
+
+        // tagOrder: 追加新标签到末尾
+        if (Array.isArray(incoming.tagOrder)) {
+            const order = settings.tagOrder || [];
+            const orderSet = new Set(order);
+            for (const rawTag of incoming.tagOrder) {
+                if (typeof rawTag !== 'string') continue;
+                const tag = rawTag.trim();
+                if (tag && !orderSet.has(tag)) {
+                    order.push(tag);
+                    orderSet.add(tag);
+                }
+            }
+            settings.tagOrder = order;
+        }
+
+        // personaOrder: 按 key skip 已存在的排序
+        if (incoming.personaOrder && typeof incoming.personaOrder === 'object') {
+            const obj = ensurePersonaOrderObj();
+            for (const [key, order] of Object.entries(incoming.personaOrder)) {
+                if (!Array.isArray(order)) continue;
+                if (!obj[key]) obj[key] = [...order];
+            }
+        }
+
+        saveSettings();
+        return count;
+    }
+
+    let backupRestoreHooked = false;
+    let isRestoring = false;
+
+    function setupBackupRestoreHooks() {
+        if (backupRestoreHooked) return;
+        backupRestoreHooked = true;
+
+        // 备份拦截：capture-phase 先于 ST 的 jQuery handler
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#personas_backup')) return;
+            e.stopImmediatePropagation();
+            e.preventDefault();
+
+            const ctx = SillyTavern.getContext();
+            const settings = getSettings();
+            const data = JSON.stringify({
+                personas: ctx.powerUserSettings.personas || {},
+                persona_descriptions: ctx.powerUserSettings.persona_descriptions || {},
+                default_persona: ctx.powerUserSettings.default_persona || null,
+                personaTags: {
+                    tagMap: settings.tagMap || {},
+                    tagOrder: settings.tagOrder || [],
+                    personaOrder: ensurePersonaOrderObj(),
+                },
+            }, null, 2);
+
+            const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
+            downloadFile(data, `personas_${timestamp}.json`);
+            toastr.success('人设备份已导出（含标签和排序数据）');
+        }, true);
+
+        // 恢复拦截：读取文件提取插件数据后放行给 ST
+        document.addEventListener('change', async (e) => {
+            if (e.target.id !== 'personas_restore_input') return;
+            if (isRestoring) return;
+            const file = e.target.files?.[0];
+            if (!file) return;
+            e.stopImmediatePropagation();
+            isRestoring = true;
+
+            let hasPluginData = false;
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                if (data.personaTags) {
+                    const count = mergePersonaTagsData(data.personaTags);
+                    toastr.success(`已恢复 ${count} 条标签映射`);
+                    hasPluginData = true;
+                }
+            } catch (err) {
+                console.error(LOG, 'Failed to extract plugin data from backup:', err);
+            }
+
+            if (!hasPluginData) {
+                toastr.info('备份文件中无标签数据，仅恢复基础人设');
+            }
+
+            $(e.target).trigger('change');
+            isRestoring = false;
+        }, true);
+    }
+
     // ===== 复制人设增强 =====
     let pendingDuplication = null;
     let pendingCreationTags = null;
@@ -1796,6 +1927,7 @@ jQuery(async () => {
         await refreshServerAvatars();
         purgeOrphanedSTEntries();
         purgeOrphanedOrders();
+        setupBackupRestoreHooks();
         injectTagEditor();
         injectViewModeToggle();
         startPopupObserver();
