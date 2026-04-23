@@ -533,7 +533,14 @@ jQuery(async () => {
             const ok = await refreshServerAvatars();
             purgeOrphanedSTEntries();
             purgeOrphanedEntries();
-            applyFiltersAndRender();
+            if (serverAvatarList.length === 0) {
+                isOwnRender = true;
+                $('#user_avatar_block').empty().append('<div class="persona-empty-placeholder">暂无人设</div>');
+                setTimeout(() => { isOwnRender = false; }, 0);
+                $('#persona-batch-toolbar').remove();
+            } else {
+                applyFiltersAndRender();
+            }
             renderFilterArea();
             updateViewModeInfo();
             $icon.removeClass('fa-spin');
@@ -1267,7 +1274,7 @@ jQuery(async () => {
     }
 
     function applyFiltersAndRender() {
-        if (!serverAvatarSet) return;
+        if (serverAvatarList.length === 0) return;
         const contextList = getContextList();
         const filtered = applyFilters(contextList);
         pruneSelection(filtered);
