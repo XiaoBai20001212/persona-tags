@@ -1172,10 +1172,6 @@ jQuery(async () => {
 
         const $card = $('<div class="avatar-container interactable"></div>').attr('data-avatar-id', avatarId).attr('tabindex', '0');
 
-        // 排序位号徽章
-        const $positionBadge = $('<span class="persona-position-badge"></span>').text(index + 1);
-        $card.append($positionBadge);
-
         // 批量选中复选框（仅在批量模式下显示）
         if (batchMode) {
             const isChecked = selectedAvatars.has(avatarId);
@@ -1196,9 +1192,11 @@ jQuery(async () => {
         // 信息容器
         const $info = $('<div class="flex-container wide100pLess70px character_select_container"></div>');
 
-        // 名称 + 标题
+        // 名称 + 排序位号 + 标题
         const $nameBlock = $('<div class="wide100p character_name_block"></div>');
-        $nameBlock.append($('<span class="ch_name flex1"></span>').text(personaName));
+        const $name = $('<span class="ch_name flex1"></span>').text(personaName);
+        $name.append($('<span class="persona-position-badge"></span>').text(`(${index + 1})`));
+        $nameBlock.append($name);
         $nameBlock.append($('<small class="ch_additional_info"></small>').text(title));
         $info.append($nameBlock);
 
