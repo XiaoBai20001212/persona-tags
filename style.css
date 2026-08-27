@@ -434,6 +434,11 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
     .persona-card-checkbox-wrap {
         width: 44px;
         height: 44px;
+        /* 大热区保留，但复选框贴回左上角，与桌面端对齐 */
+        align-items: flex-start;
+        justify-content: flex-start;
+        padding: 4px;
+        box-sizing: border-box;
     }
     .persona-card-checkbox {
         width: 22px;
@@ -448,7 +453,9 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
 }
 
 #user_avatar_block .avatar-container {
-    position: relative;
+    position: relative !important;
+    /* 焊死渲染层：修复平板（毛玻璃+滚动列表）上绝对定位复选框漂移 */
+    transform: translateZ(0);
     touch-action: pan-y;
 }
 
