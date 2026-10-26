@@ -1045,24 +1045,27 @@ jQuery(async () => {
 
     function showBatchTagPicker(title, message, tags, tagCounts) {
         const picked = new Set();
-        let pickerHtml = '<div class="persona-batch-tag-picker">';
+        // 用 .attr()/.text() 构建，避免标签名中的 " < 等字符破坏 HTML
+        const $picker = $('<div class="persona-batch-tag-picker"></div>');
         for (const tag of tags) {
             const color = getTagColor(tag);
-            pickerHtml += `<span class="persona-batch-tag-pill" data-tag="${tag}" style="background:${color.bg};color:${color.fg}">${tag} (${tagCounts[tag]})</span>`;
+            $picker.append($('<span class="persona-batch-tag-pill"></span>')
+                .attr('data-tag', tag)
+                .css({ background: color.bg, color: color.fg })
+                .text(`${tag} (${tagCounts[tag]})`));
         }
-        pickerHtml += '</div>';
 
         return new Promise(resolve => {
             const $overlay = $('<div class="persona-batch-overlay"></div>');
             const $dialog = $(`<div class="persona-batch-dialog">
                 <div class="persona-batch-dialog-title">${title}</div>
                 <div class="persona-batch-dialog-msg">${message}</div>
-                ${pickerHtml}
                 <div class="persona-batch-dialog-buttons">
                     <span class="persona-batch-btn persona-batch-dialog-cancel">取消</span>
                     <span class="persona-batch-btn persona-batch-dialog-ok">移除选中</span>
                 </div>
             </div>`);
+            $dialog.find('.persona-batch-dialog-msg').after($picker);
             $dialog.find('.persona-batch-tag-pill').on('click', function () {
                 const tag = $(this).attr('data-tag');
                 if (picked.has(tag)) { picked.delete(tag); $(this).removeClass('picked'); }
@@ -1996,9 +1999,27 @@ jQuery(async () => {
         let takeoverDebounce = null;
         const block = document.getElementById('user_avatar_block');
         if (block) {
+            // ST 编辑人设（改名、改标题、换头像等）后会重画列表并滚回顶部，
+            // 这里随时记录滚动位置，接管重画后恢复；搜索词变化时不恢复（结果从头看）
+            const scrollEls = [block, block.closest('.drawer-content')].filter(Boolean);
+            let lastScroll = null;
+            let scrollToRestore = null;
+            let lastSearch = $('#persona_search_bar').val() || '';
+            const saveScroll = () => {
+                // 面板隐藏时读到的 scrollTop 恒为 0，不能记
+                if (scrollToRestore || !block.getClientRects().length) return;
+                lastScroll = scrollEls.map(el => el.scrollTop);
+            };
+            saveScroll();
+            for (const el of scrollEls) el.addEventListener('scroll', saveScroll, { passive: true });
+            // 兜底：面板重新显示时位置若有变化不一定触发 scroll 事件，点击时补记一次
+            document.addEventListener('pointerdown', saveScroll, true);
+
             new MutationObserver(() => {
                 if (isOwnRender) return;
                 if (personaDragState) return;
+                // 此时 ST 已重画完，但 scroll 事件尚未派发，lastScroll 仍是重画前的位置
+                if (!scrollToRestore) scrollToRestore = lastScroll;
                 handlePendingDuplication();
                 handlePendingCreationTags();
                 clearTimeout(takeoverDebounce);
@@ -2022,6 +2043,12 @@ jQuery(async () => {
                     applyFiltersAndRender();
                     renderFilterArea();
                     if (currentPersonaAvatar) renderTagEditor(currentPersonaAvatar);
+                    const search = $('#persona_search_bar').val() || '';
+                    if (scrollToRestore && search === lastSearch) {
+                        scrollEls.forEach((el, i) => { el.scrollTop = scrollToRestore[i]; });
+                    }
+                    lastSearch = search;
+                    scrollToRestore = null;
                 }, 50);
             }).observe(block, { childList: true });
         }
