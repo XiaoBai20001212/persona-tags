@@ -43,7 +43,21 @@ Saat daftar persona Anda makin banyak, melacak siapa dan peran masing-masing per
 
 ## Instalasi
 
-Letakkan folder `persona-tags` ke dalam:
+### Metode 1: Instal di dalam SillyTavern (Disarankan)
+
+1. Buka SillyTavern lalu klik **Extensions** (ikon kubus di bilah atas)
+2. Klik **Install extension**
+3. Tempel URL repositori di bawah ini, instal, lalu muat ulang halaman:
+
+```
+https://github.com/XiaoBai20001212/persona-tags
+```
+
+> Pembaruan di masa mendatang dapat diinstal langsung dari **Manage extensions**.
+
+### Metode 2: Instalasi Manual
+
+Unduh dan ekstrak repositori, lalu letakkan seluruh folder `persona-tags` ke dalam:
 
 ```
 SillyTavern/public/scripts/extensions/third-party/persona-tags/

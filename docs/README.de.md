@@ -43,7 +43,21 @@ Wenn deine Persona-Liste stark anwächst, verliert man schnell den Überblick, w
 
 ## Installation
 
-Lege den Ordner `persona-tags` in folgendes Verzeichnis:
+### Methode 1: Direkt in SillyTavern installieren (Empfohlen)
+
+1. Öffne SillyTavern und klicke auf **Erweiterungen** (das Würfel-Symbol in der oberen Leiste)
+2. Klicke auf **Erweiterung installieren**
+3. Füge die folgende Repository-URL ein, installiere die Erweiterung und lade die Seite neu:
+
+```
+https://github.com/XiaoBai20001212/persona-tags
+```
+
+> Zukünftige Updates können direkt über **Erweiterungen verwalten** installiert werden.
+
+### Methode 2: Manuelle Installation
+
+Lade das Repository herunter, entpacke es und lege den gesamten Ordner `persona-tags` in folgendes Verzeichnis:
 
 ```
 SillyTavern/public/scripts/extensions/third-party/persona-tags/

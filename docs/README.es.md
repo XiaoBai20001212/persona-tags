@@ -43,7 +43,21 @@ Cuando tu lista de personas crece demasiado, rápidamente se vuelve difícil sab
 
 ## Instalación
 
-Coloca la carpeta `persona-tags` en:
+### Método 1: Instalar dentro de SillyTavern (Recomendado)
+
+1. Abre SillyTavern y haz clic en **Extensiones** (el icono de cubos en la barra superior)
+2. Haz clic en **Instalar extensión**
+3. Pega la siguiente URL del repositorio, instálala y actualiza la página:
+
+```
+https://github.com/XiaoBai20001212/persona-tags
+```
+
+> Las futuras actualizaciones pueden instalarse directamente desde **Gestionar extensiones**.
+
+### Método 2: Instalación manual
+
+Descarga y extrae el repositorio, luego coloca toda la carpeta `persona-tags` en:
 
 ```
 SillyTavern/public/scripts/extensions/third-party/persona-tags/

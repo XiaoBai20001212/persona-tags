@@ -43,7 +43,21 @@ Khi danh sách Persona ngày càng nhiều, việc nhớ ai là ai trở nên kh
 
 ## Cài đặt
 
-Đặt thư mục `persona-tags` vào đường dẫn:
+### Cách 1: Cài đặt trực tiếp trong SillyTavern (Khuyên dùng)
+
+1. Mở SillyTavern và nhấp vào **Tiện ích** (biểu tượng các khối lập phương trên thanh công cụ phía trên)
+2. Nhấp vào **Cài đặt tiện ích**
+3. Dán URL kho lưu trữ bên dưới, tiến hành cài đặt rồi tải lại trang:
+
+```
+https://github.com/XiaoBai20001212/persona-tags
+```
+
+> Các bản cập nhật sau này có thể được cài đặt trực tiếp từ **Quản lý tiện ích**.
+
+### Cách 2: Cài đặt thủ công
+
+Tải xuống và giải nén kho lưu trữ, sau đó đặt toàn bộ thư mục `persona-tags` vào đường dẫn:
 
 ```
 SillyTavern/public/scripts/extensions/third-party/persona-tags/

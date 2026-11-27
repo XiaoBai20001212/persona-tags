@@ -43,7 +43,21 @@ SillyTavern 人設管理增強擴充功能。
 
 ## 安裝
 
-將 `persona-tags` 資料夾放到：
+### 方式一：在 SillyTavern 內直接安裝（推薦）
+
+1. 開啟 SillyTavern，點選頂部選單列的「**擴充功能**」（方塊圖示）
+2. 點選「**安裝擴充功能**」
+3. 在輸入框中貼上下方儲存庫網址，點選安裝並重新整理頁面即可：
+
+```
+https://github.com/XiaoBai20001212/persona-tags
+```
+
+> 後續有新版本時，可直接在「**管理擴充功能**」中一鍵更新。
+
+### 方式二：手動安裝
+
+下載儲存庫壓縮檔並解壓縮，將整個 `persona-tags` 資料夾放到：
 
 ```
 SillyTavern/public/scripts/extensions/third-party/persona-tags/

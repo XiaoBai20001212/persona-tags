@@ -43,7 +43,21 @@ Lorsque votre liste de personas s'allonge, il devient vite difficile de s'y retr
 
 ## Installation
 
-Placez le dossier `persona-tags` dans :
+### Méthode 1 : Installer depuis SillyTavern (Recommandé)
+
+1. Ouvrez SillyTavern et cliquez sur **Extensions** (l'icône de cubes dans la barre supérieure)
+2. Cliquez sur **Installer une extension**
+3. Collez l'URL du dépôt ci-dessous, lancez l'installation puis actualisez la page :
+
+```
+https://github.com/XiaoBai20001212/persona-tags
+```
+
+> Les futures mises à jour pourront être installées directement depuis **Gérer les extensions**.
+
+### Méthode 2 : Installation manuelle
+
+Téléchargez et extrayez le dépôt, puis placez le dossier `persona-tags` complet dans :
 
 ```
 SillyTavern/public/scripts/extensions/third-party/persona-tags/

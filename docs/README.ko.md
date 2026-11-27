@@ -43,7 +43,21 @@ SillyTavern용 페르소나 관리 기능 강화 확장 프로그램입니다.
 
 ## 설치 방법
 
-`persona-tags` 폴더를 다음 경로에 넣으세요:
+### 방법 1: SillyTavern 내에서 바로 설치 (권장)
+
+1. SillyTavern을 열고 **확장**(상단 바의 큐브 아이콘)을 클릭합니다
+2. **확장 프로그램 설치**를 클릭합니다
+3. 아래 저장소 URL을 붙여넣고 설치한 뒤 페이지를 새로고침합니다:
+
+```
+https://github.com/XiaoBai20001212/persona-tags
+```
+
+> 이후 업데이트는 **확장 프로그램 관리**에서 바로 설치할 수 있습니다.
+
+### 방법 2: 수동 설치
+
+저장소를 다운로드하여 압축을 푼 뒤, `persona-tags` 폴더 전체를 다음 경로에 넣으세요:
 
 ```
 SillyTavern/public/scripts/extensions/third-party/persona-tags/

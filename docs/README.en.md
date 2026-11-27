@@ -43,7 +43,21 @@ When your persona list grows large, it quickly becomes hard to keep track of who
 
 ## Installation
 
-Place the `persona-tags` folder into:
+### Method 1: Install inside SillyTavern (Recommended)
+
+1. Open SillyTavern and click **Extensions** (the cubes icon in the top bar)
+2. Click **Install extension**
+3. Paste the repository URL below, install it, and refresh the page:
+
+```
+https://github.com/XiaoBai20001212/persona-tags
+```
+
+> Future updates can be installed directly from **Manage extensions**.
+
+### Method 2: Manual Installation
+
+Download and extract the repository, then place the entire `persona-tags` folder into:
 
 ```
 SillyTavern/public/scripts/extensions/third-party/persona-tags/
