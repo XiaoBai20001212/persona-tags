@@ -1,4 +1,4 @@
-**简体中文** | [English](docs/README.en.md) | [繁體中文](docs/README.zh-TW.md) | [Русский](docs/README.ru.md) | [한국어](docs/README.ko.md) | [Español](docs/README.es.md) | [Português (BR)](docs/README.pt-BR.md) | [Deutsch](docs/README.de.md) | [Français](docs/README.fr.md) | [ไทย](docs/README.th.md) | [Tiếng Việt](docs/README.vi.md) | [Bahasa Indonesia](docs/README.id.md)
+**简体中文** | [English](docs/README.en.md) | [繁體中文](docs/README.zh-TW.md) | [Русский](docs/README.ru.md) | [한국어](docs/README.ko.md) | [Español](docs/README.es.md) | [Português (BR)](docs/README.pt-BR.md) | [Deutsch](docs/README.de.md) | [Français](docs/README.fr.md) | [ไทย](docs/README.th.md) | [Tiếng Việt](docs/README.vi.md) | [Bahasa Indonesia](docs/README.id.md) | [العربية](docs/README.ar.md)
 
 # Persona Tags
 
