@@ -6,6 +6,10 @@ Ekstensi manajemen Persona tingkat lanjut untuk SillyTavern.
 
 Saat daftar persona Anda makin banyak, melacak siapa dan peran masing-masing persona menjadi cepat merepotkan. Ekstensi ini memungkinkan Anda memberi tag pada persona, menyaring berdasarkan tag, mengelola secara massal, serta mengatur ulang urutan dengan bebas agar semuanya tetap rapi dan mudah ditemukan.
 
+| Tampilan Utama & Pemilih Tag | Filter Tag & Mode Massal |
+| :---: | :---: |
+| ![Tampilan Utama & Pemilih Tag](images/en-overview.png) | ![Filter Tag & Mode Massal](images/en-batch.png) |
+
 ## Fitur
 
 ### Sistem Tag

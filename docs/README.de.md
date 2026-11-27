@@ -6,6 +6,10 @@ Eine erweiterte Erweiterung für die Persona-Verwaltung in SillyTavern.
 
 Wenn deine Persona-Liste stark anwächst, verliert man schnell den Überblick, wer wer ist. Mit dieser Erweiterung kannst du Personas mit Tags versehen, nach Tags filtern, im Stapel bearbeiten und frei neu anordnen, damit alles übersichtlich und leicht auffindbar bleibt.
 
+| Übersicht & Schnellauswahl vorhandener Tags | Tag-Filter & Stapelverarbeitung |
+| :---: | :---: |
+| ![Übersicht & Schnellauswahl vorhandener Tags](images/en-overview.png) | ![Tag-Filter & Stapelverarbeitung](images/en-batch.png) |
+
 ## Funktionen
 
 ### Tag-System

@@ -6,6 +6,10 @@ Uma extensão aprimorada de gerenciamento de personas para o SillyTavern.
 
 Quando a sua lista de personas cresce muito, rapidamente fica difícil lembrar quem é quem. Esta extensão permite adicionar tags às personas, filtrar por tags, gerenciar em lote e reordenar livremente para manter tudo organizado e fácil de encontrar.
 
+| Visão geral e seletor de tags | Filtro por tags e modo em lote |
+| :---: | :---: |
+| ![Visão geral e seletor de tags](images/en-overview.png) | ![Filtro por tags e modo em lote](images/en-batch.png) |
+
 ## Recursos
 
 ### Sistema de tags

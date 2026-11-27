@@ -6,6 +6,10 @@ Une extension de gestion de personas améliorée pour SillyTavern.
 
 Lorsque votre liste de personas s'allonge, il devient vite difficile de s'y retrouver. Cette extension vous permet d'ajouter des tags à vos personas, de filtrer par tag, de gérer par lot et de réorganiser librement l'ordre d'affichage pour tout garder propre et facile à trouver.
 
+| Vue d’ensemble et sélection rapide de tags | Filtrage par tags et mode par lots |
+| :---: | :---: |
+| ![Vue d’ensemble et sélection rapide de tags](images/en-overview.png) | ![Filtrage par tags et mode par lots](images/en-batch.png) |
+
 ## Fonctionnalités
 
 ### Système de tags

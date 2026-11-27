@@ -6,6 +6,10 @@ Una extensión de gestión de personas mejorada para SillyTavern.
 
 Cuando tu lista de personas crece demasiado, rápidamente se vuelve difícil saber quién es quién. Esta extensión te permite añadir tags a tus personas, filtrar por tags, gestionarlas por lotes y reordenarlas libremente para mantener todo organizado y fácil de encontrar.
 
+| Vista general y selector de etiquetas | Filtrado por etiquetas y modo por lotes |
+| :---: | :---: |
+| ![Vista general y selector de etiquetas](images/en-overview.png) | ![Filtrado por etiquetas y modo por lotes](images/en-batch.png) |
+
 ## Características
 
 ### Sistema de tags

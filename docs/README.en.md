@@ -6,6 +6,10 @@ An enhanced Persona Management extension for SillyTavern.
 
 When your persona list grows large, it quickly becomes hard to keep track of who is who. This extension lets you tag personas, filter by tags, manage in batches, and reorder freely so everything stays clean and easy to find.
 
+| Overview & Existing Tags Picker | Tag Filtering & Batch Mode |
+| :---: | :---: |
+| ![Overview & Existing Tags Picker](images/en-overview.png) | ![Tag Filtering & Batch Mode](images/en-batch.png) |
+
 ## Features
 
 ### Tagging System

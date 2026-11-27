@@ -6,6 +6,10 @@ Tiện ích mở rộng quản lý Persona nâng cao dành cho SillyTavern.
 
 Khi danh sách Persona ngày càng nhiều, việc nhớ ai là ai trở nên khó khăn hơn rất nhanh. Tiện ích này giúp bạn gắn thẻ Persona, lọc theo thẻ, quản lý hàng loạt và tự do sắp xếp lại thứ tự để mọi thứ luôn gọn gàng, dễ tìm.
 
+| Tổng quan & chọn nhanh thẻ có sẵn | Lọc theo thẻ & chế độ hàng loạt |
+| :---: | :---: |
+| ![Tổng quan & chọn nhanh thẻ có sẵn](images/en-overview.png) | ![Lọc theo thẻ & chế độ hàng loạt](images/en-batch.png) |
+
 ## Tính năng
 
 ### Hệ thống thẻ
