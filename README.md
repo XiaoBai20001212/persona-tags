@@ -1,3 +1,5 @@
+**简体中文** | [English](docs/README.en.md) | [繁體中文](docs/README.zh-TW.md) | [Русский](docs/README.ru.md) | [한국어](docs/README.ko.md) | [Español](docs/README.es.md) | [Português (BR)](docs/README.pt-BR.md) | [Deutsch](docs/README.de.md) | [Français](docs/README.fr.md) | [ไทย](docs/README.th.md) | [Tiếng Việt](docs/README.vi.md) | [Bahasa Indonesia](docs/README.id.md)
+
 # Persona Tags
 
 SillyTavern 人设管理增强插件。
@@ -33,10 +35,12 @@ SillyTavern 人设管理增强插件。
 - 刷新按钮手动刷新列表
 - 列表/网格两种视图都支持
 
-### 其他
+### 多语言与其他
+- 完整支持 SillyTavern 官方全部 17 种界面语言，自动跟随酒馆当前语言显示（未覆盖语种自动回退英文）
+- 简体中文模式下自动为 ST 原生英文弹窗（创建、重命名、删除等）补齐汉化
 - 复制人设时可以勾选是否带标签、带绑定关系
 - 多个人设绑同一角色卡时，选择弹窗能看到头像、名字、标签
-- ST 原生的英文弹窗（创建、重命名、删除等）全部汉化
+- 备份 / 恢复人设时自动包含标签、排序与快捷滚动设置
 
 ## 安装
 

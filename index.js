@@ -12,6 +12,155 @@ jQuery(async () => {
     await waitForCondition(() => typeof SillyTavern !== 'undefined' && typeof SillyTavern.getContext === 'function', 10000);
     console.log(LOG, 'SillyTavern context ready');
 
+    // ===== 多语言（i18n，严格跟随 SillyTavern 当前语言，未覆盖语言统一回退英文） =====
+    const SUPPORTED_LOCALES = new Set([
+        'ar-sa', 'zh-cn', 'zh-tw', 'nl-nl', 'de-de', 'fr-fr',
+        'is-is', 'it-it', 'ja-jp', 'ko-kr', 'pt-pt', 'ru-ru',
+        'es-es', 'uk-ua', 'vi-vn', 'th-th',
+    ]);
+
+    const EN_STRINGS = {
+        alreadyAtPosition: 'Already at this position',
+        movedToPosition: 'Moved to #{pos}',
+        currentPosition: '#{pos} of {total}',
+        selectPersonaFirst: 'Please select a persona first',
+        noTagsYetHint: 'No tags yet. Type below to add.',
+        removeTagTitle: 'Remove tag',
+        noExistingTags: 'No existing tags yet',
+        allExistingTagsAdded: 'All existing tags are already added',
+        sortOrderHeading: 'Sort Order',
+        moveToPositionLabel: 'Move to #',
+        moveToPositionSuffix: '',
+        moveButton: 'Move',
+        personaTagsHeading: 'Persona Tags',
+        existingTagsToggleTitle: 'Show/hide existing tags',
+        existingTagsToggle: 'Existing Tags',
+        tagInputPlaceholder: 'Add tags, comma-separated',
+        invalidPositionWarning: 'Please enter a valid position number',
+        tagAlreadyExists: 'Tag already exists',
+        viewConnectedTitle: 'Show only personas connected to the current character',
+        viewConnected: 'Connected',
+        viewAllTitle: 'Show all personas',
+        viewAll: 'All',
+        batchModeTitle: 'Batch edit',
+        batchMode: 'Batch',
+        refreshListTitle: 'Refresh persona list',
+        noPersonas: 'No personas',
+        refreshed: 'Refreshed',
+        refreshFailed: 'Refresh failed, please check your connection',
+        scrollUpTitle: 'Jump up {step} (hold 0.5s for top)',
+        scrollDownTitle: 'Jump down {step} (hold 0.5s for bottom)',
+        scrollStepTitle: 'Personas per quick scroll jump',
+        noCharacterSelected: 'No character',
+        tagFilter: 'Tag Filter',
+        resetFilter: 'Reset',
+        filterModeInclude: 'Inc',
+        filterModeExclude: 'Exc',
+        filterModeIncludeTitle: 'Mode: Include (show only matching tags)',
+        filterModeExcludeTitle: 'Mode: Exclude (hide matching tags)',
+        batchSelectedCount: 'Selected: {count}',
+        selectAll: 'Select All',
+        deselectAll: 'Clear',
+        batchAddTagsBtn: 'Add Tags',
+        batchRemoveTagsBtn: 'Remove Tags',
+        batchDeleteBtn: 'Delete',
+        batchAddTagsTitle: 'Batch Add Tags',
+        batchAddTagsMsg: 'Add tags to {count} persona(s) (comma-separated):',
+        batchAddTagsError: 'Failed to batch add tags',
+        batchTagsAdded: 'Added {count} tag(s)',
+        allTagsAlreadyExist: 'All tags already exist',
+        selectedPersonasNoTags: 'Selected personas have no tags',
+        batchRemoveTagsTitle: 'Batch Remove Tags',
+        batchRemoveTagsMsg: 'Remove tags from {count} persona(s):',
+        batchRemoveTagsError: 'Failed to batch remove tags',
+        batchTagsRemoved: 'Removed {count} tag(s)',
+        batchDeleteTitle: 'Batch Delete',
+        batchDeleteMsg: 'Are you sure you want to delete {count} persona(s)? This cannot be undone!',
+        batchDeleted: 'Deleted {count} persona(s)',
+        batchDeleteFailed: 'Failed to delete {count}: {names}',
+        listSeparator: ', ',
+        tagExamplesPlaceholder: 'tag1, tag2, ...',
+        cancelBtn: 'Cancel',
+        confirmBtn: 'Confirm',
+        removeSelectedBtn: 'Remove Selected',
+        confirmDeleteBtn: 'Delete',
+        unnamedPersona: '[Unnamed Persona]',
+        unnamedShort: '[Unnamed]',
+        noMatchingPersonas: 'No matching personas',
+        backupExported: 'Persona backup exported (including tags and sort order)',
+        backupTagsRestored: 'Restored tags for {count} persona(s)',
+        backupNoPluginData: 'No tag data in backup; restored base personas only',
+        dupeCopyTags: 'Copy tags',
+        dupeCopyConnections: 'Copy connections',
+        dupeConfirmBtn: 'Duplicate',
+        createTagsLabel: 'Persona tags (optional, comma-separated)',
+    };
+
+    let currentLocale = 'en';
+    let localeStrings = EN_STRINGS;
+
+    function detectSTLocale() {
+        try {
+            const ctx = SillyTavern.getContext();
+            if (typeof ctx.getCurrentLocale === 'function') {
+                const loc = ctx.getCurrentLocale();
+                if (loc) return String(loc).toLowerCase();
+            }
+        } catch (e) { /* fallback to ST i18n.js formula */ }
+        return String(localStorage.getItem('language') || navigator.language || navigator.userLanguage || 'en').toLowerCase();
+    }
+
+    async function loadLocale() {
+        const rawLocale = detectSTLocale();
+        if (!SUPPORTED_LOCALES.has(rawLocale)) {
+            currentLocale = 'en';
+            localeStrings = EN_STRINGS;
+            return;
+        }
+        currentLocale = rawLocale;
+        try {
+            const url = new URL(`./locales/${rawLocale}.json`, import.meta.url);
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if (data && typeof data === 'object' && !Array.isArray(data)) {
+                localeStrings = { ...EN_STRINGS, ...data };
+                console.log(LOG, 'Loaded locale:', rawLocale);
+                return;
+            }
+        } catch (e) {
+            console.warn(LOG, `Failed to load locale ${rawLocale}, falling back to en:`, e);
+        }
+        currentLocale = 'en';
+        localeStrings = EN_STRINGS;
+    }
+
+    function isZhCn() {
+        return currentLocale === 'zh-cn';
+    }
+
+    function pt(key, params) {
+        const raw = Object.prototype.hasOwnProperty.call(localeStrings, key) ? localeStrings[key] : undefined;
+        let str = (typeof raw === 'string' && (raw !== '' || key === 'moveToPositionSuffix'))
+            ? raw
+            : (EN_STRINGS[key] ?? key);
+        if (params) {
+            for (const [k, v] of Object.entries(params)) {
+                str = str.replaceAll(`{${k}}`, String(v));
+            }
+        }
+        return str;
+    }
+
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
     // ===== 设置读写 =====
     function getSettings() {
         const ctx = SillyTavern.getContext();
@@ -235,7 +384,7 @@ jQuery(async () => {
         const currentIndex = contextList.indexOf(avatarId);
         if (currentIndex === -1) return;
         targetIndex = Math.max(0, Math.min(targetIndex, contextList.length - 1));
-        if (currentIndex === targetIndex) { toastr.info('已在该位置'); return; }
+        if (currentIndex === targetIndex) { toastr.info(pt('alreadyAtPosition')); return; }
 
         const newVisible = [...contextList];
         newVisible.splice(currentIndex, 1);
@@ -258,7 +407,7 @@ jQuery(async () => {
 
         applyFiltersAndRender();
         renderTagEditor(avatarId);
-        toastr.success(`已移动到第 ${targetIndex + 1} 位`);
+        toastr.success(pt('movedToPosition', { pos: targetIndex + 1 }));
     }
 
     function purgeOrphanedOrders() {
@@ -369,7 +518,7 @@ jQuery(async () => {
             if (avatarId) {
                 const contextList = getContextList();
                 const pos = contextList.indexOf(avatarId);
-                $('#persona-position-current').text(pos >= 0 ? `当前 #${pos + 1}（共 ${contextList.length}）` : '');
+                $('#persona-position-current').text(pos >= 0 ? pt('currentPosition', { pos: pos + 1, total: contextList.length }) : '');
                 $('#persona-position-input').val('').prop('disabled', false).attr('max', contextList.length);
                 $('#persona-position-go').removeClass('persona-batch-btn-disabled');
             } else {
@@ -387,7 +536,7 @@ jQuery(async () => {
         $list.empty();
 
         if (!avatarId) {
-            $list.html('<span class="persona-tags-empty">请先选择一个人设</span>');
+            $list.append($('<span class="persona-tags-empty"></span>').text(pt('selectPersonaFirst')));
             $section.find('#persona-tag-input').val('').prop('disabled', true);
             renderExistingTagsPicker(null);
             return;
@@ -396,14 +545,14 @@ jQuery(async () => {
         $section.find('#persona-tag-input').prop('disabled', false);
 
         if (tags.length === 0) {
-            $list.html('<span class="persona-tags-empty">暂无标签，在下方输入添加</span>');
+            $list.append($('<span class="persona-tags-empty"></span>').text(pt('noTagsYetHint')));
         } else {
             for (const tag of tags) {
                 const color = getTagColor(tag);
                 const $tag = $('<span class="persona-tag-item"></span>')
                     .css({ background: color.bg, color: color.fg })
                     .text(tag);
-                const $remove = $('<span class="persona-tag-remove" title="移除标签">×</span>');
+                const $remove = $('<span class="persona-tag-remove">×</span>').attr('title', pt('removeTagTitle'));
                 $remove.on('click', () => {
                     removeTagFromPersona(avatarId, tag);
                     renderTagEditor(avatarId);
@@ -445,9 +594,9 @@ jQuery(async () => {
         $panel.empty();
 
         if (allTags.length === 0) {
-            $panel.append('<span class="persona-tags-empty">暂无已有标签</span>');
+            $panel.append($('<span class="persona-tags-empty"></span>').text(pt('noExistingTags')));
         } else if (availableTags.length === 0) {
-            $panel.append('<span class="persona-tags-empty">所有已有标签均已添加</span>');
+            $panel.append($('<span class="persona-tags-empty"></span>').text(pt('allExistingTagsAdded')));
         } else {
             const $list = $('<div class="persona-existing-tags-list"></div>');
             for (const tag of availableTags) {
@@ -477,33 +626,36 @@ jQuery(async () => {
         const $target = $('#persona_connections_list');
         if (!$target.length) return;
 
+        const moveSuffix = pt('moveToPositionSuffix');
+        const moveSuffixHtml = moveSuffix ? `<span class="persona-position-label">${escapeHtml(moveSuffix)}</span>` : '';
+
         const html = `
             <div id="persona-position-editor" class="persona-tags-section">
                 <div class="persona-tags-header">
                     <i class="fa-solid fa-arrow-up-1-9"></i>
-                    <span>排序位置</span>
+                    <span>${escapeHtml(pt('sortOrderHeading'))}</span>
                     <span id="persona-position-current"></span>
                 </div>
                 <form id="persona-position-form" class="persona-position-controls" autocomplete="off">
-                    <span class="persona-position-label">移动到第</span>
+                    <span class="persona-position-label">${escapeHtml(pt('moveToPositionLabel'))}</span>
                     <input id="persona-position-input" class="text_pole persona-position-input" type="number" min="1" enterkeyhint="done">
-                    <span class="persona-position-label">位</span>
-                    <span id="persona-position-go" class="persona-batch-btn">移动</span>
+                    ${moveSuffixHtml}
+                    <span id="persona-position-go" class="persona-batch-btn">${escapeHtml(pt('moveButton'))}</span>
                 </form>
             </div>
             <div id="persona-tags-editor-section" class="persona-tags-section">
                 <div class="persona-tags-header">
                     <i class="fa-solid fa-tags"></i>
-                    <span>人设标签</span>
-                    <span id="persona-existing-tags-toggle" class="persona-existing-tags-toggle disabled" title="展开/收起已有标签">
-                        <i class="fa-solid fa-plus"></i> 已有标签 <i class="fa-solid fa-caret-down persona-existing-tags-caret"></i>
+                    <span>${escapeHtml(pt('personaTagsHeading'))}</span>
+                    <span id="persona-existing-tags-toggle" class="persona-existing-tags-toggle disabled" title="${escapeHtml(pt('existingTagsToggleTitle'))}">
+                        <i class="fa-solid fa-plus"></i> ${escapeHtml(pt('existingTagsToggle'))} <i class="fa-solid fa-caret-down persona-existing-tags-caret"></i>
                     </span>
                 </div>
                 <div id="persona-existing-tags-panel" class="persona-existing-tags-panel"></div>
                 <div class="persona-tags-list"></div>
                 <form id="persona-tag-form" autocomplete="off">
                     <input id="persona-tag-input" class="text_pole" type="text"
-                           placeholder="输入标签，逗号分隔可批量添加" enterkeyhint="done">
+                           placeholder="${escapeHtml(pt('tagInputPlaceholder'))}" enterkeyhint="done">
                 </form>
             </div>
         `;
@@ -524,7 +676,7 @@ jQuery(async () => {
         $('#persona-position-go').on('click', () => {
             if (!currentPersonaAvatar) return;
             const input = parseInt($('#persona-position-input').val(), 10);
-            if (isNaN(input) || input < 1) { toastr.warning('请输入有效的位置数字'); return; }
+            if (isNaN(input) || input < 1) { toastr.warning(pt('invalidPositionWarning')); return; }
             movePersonaToPosition(currentPersonaAvatar, input - 1);
             $('#persona-position-input').val('');
         });
@@ -555,7 +707,7 @@ jQuery(async () => {
                 applyFiltersAndRender();
             }
             if (duplicated > 0 && added === 0) {
-                toastr.warning('标签已存在');
+                toastr.warning(pt('tagAlreadyExists'));
             }
         });
 
@@ -572,17 +724,17 @@ jQuery(async () => {
 
         const html = `
             <div id="persona-tags-view-mode" class="persona-view-mode-bar">
-                <span class="persona-view-mode-btn active" data-mode="connected" title="仅显示与当前角色卡绑定的人设">
-                    <i class="fa-solid fa-link"></i> 当前角色
+                <span class="persona-view-mode-btn active" data-mode="connected" title="${escapeHtml(pt('viewConnectedTitle'))}">
+                    <i class="fa-solid fa-link"></i> ${escapeHtml(pt('viewConnected'))}
                 </span>
-                <span class="persona-view-mode-btn" data-mode="all" title="显示所有人设">
-                    <i class="fa-solid fa-users"></i> 全部人设
+                <span class="persona-view-mode-btn" data-mode="all" title="${escapeHtml(pt('viewAllTitle'))}">
+                    <i class="fa-solid fa-users"></i> ${escapeHtml(pt('viewAll'))}
                 </span>
                 <span class="persona-view-mode-info"></span>
-                <span class="persona-view-mode-btn persona-batch-mode-btn" title="批量编辑">
-                    <i class="fa-solid fa-list-check"></i> 批量
+                <span class="persona-view-mode-btn persona-batch-mode-btn" title="${escapeHtml(pt('batchModeTitle'))}">
+                    <i class="fa-solid fa-list-check"></i> ${escapeHtml(pt('batchMode'))}
                 </span>
-                <span class="persona-view-mode-btn persona-refresh-btn" title="刷新人设列表">
+                <span class="persona-view-mode-btn persona-refresh-btn" title="${escapeHtml(pt('refreshListTitle'))}">
                     <i class="fa-solid fa-rotate"></i>
                 </span>
             </div>
@@ -608,7 +760,7 @@ jQuery(async () => {
             purgeOrphanedEntries();
             if (serverAvatarList.length === 0) {
                 isOwnRender = true;
-                $('#user_avatar_block').empty().append('<div class="persona-empty-placeholder">暂无人设</div>');
+                $('#user_avatar_block').empty().append($('<div class="persona-empty-placeholder"></div>').text(pt('noPersonas')));
                 setTimeout(() => { isOwnRender = false; }, 0);
                 $('#persona-batch-toolbar').remove();
             } else {
@@ -618,8 +770,8 @@ jQuery(async () => {
             updateViewModeInfo();
             if (currentPersonaAvatar) renderTagEditor(currentPersonaAvatar);
             $icon.removeClass('fa-spin');
-            if (ok) toastr.success('已刷新');
-            else toastr.error('刷新失败，请检查网络');
+            if (ok) toastr.success(pt('refreshed'));
+            else toastr.error(pt('refreshFailed'));
         });
 
         // 批量编辑模式切换
@@ -647,8 +799,8 @@ jQuery(async () => {
     }
 
     function updateQuickScrollTooltips(step) {
-        $('#persona-scroll-up').attr('title', `向上跳 ${step} 个（长按 0.5 秒直达顶部）`);
-        $('#persona-scroll-down').attr('title', `向下跳 ${step} 个（长按 0.5 秒直达底部）`);
+        $('#persona-scroll-up').attr('title', pt('scrollUpTitle', { step }));
+        $('#persona-scroll-down').attr('title', pt('scrollDownTitle', { step }));
     }
 
     function setScrollStep(step) {
@@ -792,7 +944,7 @@ jQuery(async () => {
                     <i class="fa-solid fa-arrow-down"></i>
                 </span>
                 <form id="persona-scroll-step-form" class="persona-scroll-step-form" autocomplete="off" novalidate>
-                    <input id="persona-scroll-step" class="text_pole persona-scroll-step" type="number" min="1" max="999" inputmode="numeric" enterkeyhint="done" title="每次快捷滚动的楼层数">
+                    <input id="persona-scroll-step" class="text_pole persona-scroll-step" type="number" min="1" max="999" inputmode="numeric" enterkeyhint="done" title="${escapeHtml(pt('scrollStepTitle'))}">
                 </form>
             </div>
         `);
@@ -842,7 +994,7 @@ jQuery(async () => {
             if (name && connected !== null) {
                 $info.text(`${name} (${connected.length})`);
             } else {
-                $info.text('无角色卡');
+                $info.text(pt('noCharacterSelected'));
             }
         } else {
             $info.text('');
@@ -883,9 +1035,10 @@ jQuery(async () => {
         // 顶部行：下拉按钮 + 已选标签药丸
         const $topRow = $('<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px"></div>');
 
+        const filterText = escapeHtml(pt('tagFilter'));
         const toggleLabel = activeFilters.size > 0
-            ? `<i class="fa-solid fa-filter"></i> 标签筛选 <span class="filter-count">${activeFilters.size}</span> <i class="fa-solid fa-caret-${dropdownOpen ? 'up' : 'down'}" style="margin-left:2px"></i>`
-            : `<i class="fa-solid fa-filter"></i> 标签筛选 <i class="fa-solid fa-caret-${dropdownOpen ? 'up' : 'down'}" style="margin-left:2px"></i>`;
+            ? `<i class="fa-solid fa-filter"></i> ${filterText} <span class="filter-count">${activeFilters.size}</span> <i class="fa-solid fa-caret-${dropdownOpen ? 'up' : 'down'}" style="margin-left:2px"></i>`
+            : `<i class="fa-solid fa-filter"></i> ${filterText} <i class="fa-solid fa-caret-${dropdownOpen ? 'up' : 'down'}" style="margin-left:2px"></i>`;
         const $toggle = $(`<span class="persona-filter-dropdown-toggle">${toggleLabel}</span>`);
         $toggle.on('click', () => {
             dropdownOpen = !dropdownOpen;
@@ -900,7 +1053,7 @@ jQuery(async () => {
         const $list = $('<div class="persona-filter-dropdown-list"></div>');
 
         // 重置按钮（常驻）
-        const $clear = $('<span class="persona-tag-clear-btn"><i class="fa-solid fa-xmark"></i> 重置</span>');
+        const $clear = $(`<span class="persona-tag-clear-btn"><i class="fa-solid fa-xmark"></i> ${escapeHtml(pt('resetFilter'))}</span>`);
         $clear.on('click', () => {
             activeFilters.clear();
             renderFilterArea();
@@ -909,8 +1062,8 @@ jQuery(async () => {
         $list.append($clear);
 
         // 正向/反向切换按钮
-        const modeLabel = filterMode === 'include' ? '正' : '反';
-        const modeTitle = filterMode === 'include' ? '当前：正向筛选（只显示匹配标签）' : '当前：反向筛选（隐藏匹配标签）';
+        const modeLabel = escapeHtml(filterMode === 'include' ? pt('filterModeInclude') : pt('filterModeExclude'));
+        const modeTitle = escapeHtml(filterMode === 'include' ? pt('filterModeIncludeTitle') : pt('filterModeExcludeTitle'));
         const $modeBtn = $(`<span class="persona-filter-mode-btn${filterMode === 'exclude' ? ' exclude' : ''}" title="${modeTitle}"><i class="fa-solid fa-arrows-rotate"></i> ${modeLabel}</span>`);
         $modeBtn.on('click', () => {
             filterMode = filterMode === 'include' ? 'exclude' : 'include';
@@ -1140,15 +1293,15 @@ jQuery(async () => {
         $toolbar.empty();
 
         // 选中计数
-        $toolbar.append($('<span class="persona-batch-count"></span>').text(`已选 ${selectedAvatars.size} 个`));
+        $toolbar.append($('<span class="persona-batch-count"></span>').text(pt('batchSelectedCount', { count: selectedAvatars.size })));
 
         // 全选
-        const $selectAll = $('<span class="persona-batch-btn"><i class="fa-solid fa-check-double"></i> 全选</span>');
+        const $selectAll = $(`<span class="persona-batch-btn"><i class="fa-solid fa-check-double"></i> ${escapeHtml(pt('selectAll'))}</span>`);
         $selectAll.on('click', selectAllVisible);
         $toolbar.append($selectAll);
 
         // 取消
-        const $deselect = $('<span class="persona-batch-btn"><i class="fa-solid fa-xmark"></i> 取消</span>');
+        const $deselect = $(`<span class="persona-batch-btn"><i class="fa-solid fa-xmark"></i> ${escapeHtml(pt('deselectAll'))}</span>`);
         $deselect.on('click', deselectAll);
         $toolbar.append($deselect);
 
@@ -1159,17 +1312,17 @@ jQuery(async () => {
         const hasSelection = selectedAvatars.size > 0;
         const disabledClass = hasSelection ? '' : ' persona-batch-btn-disabled';
 
-        const $addTags = $(`<span class="persona-batch-btn${disabledClass}"><i class="fa-solid fa-tags"></i> 打标签</span>`);
+        const $addTags = $(`<span class="persona-batch-btn${disabledClass}"><i class="fa-solid fa-tags"></i> ${escapeHtml(pt('batchAddTagsBtn'))}</span>`);
         if (hasSelection) $addTags.on('click', batchAddTags);
         $toolbar.append($addTags);
 
         // 批量删标签
-        const $removeTags = $(`<span class="persona-batch-btn${disabledClass}"><i class="fa-solid fa-tag"></i> 删标签</span>`);
+        const $removeTags = $(`<span class="persona-batch-btn${disabledClass}"><i class="fa-solid fa-tag"></i> ${escapeHtml(pt('batchRemoveTagsBtn'))}</span>`);
         if (hasSelection) $removeTags.on('click', batchRemoveTags);
         $toolbar.append($removeTags);
 
         // 批量删除
-        const $del = $(`<span class="persona-batch-btn persona-batch-btn-danger${disabledClass}"><i class="fa-solid fa-trash"></i> 删除</span>`);
+        const $del = $(`<span class="persona-batch-btn persona-batch-btn-danger${disabledClass}"><i class="fa-solid fa-trash"></i> ${escapeHtml(pt('batchDeleteBtn'))}</span>`);
         if (hasSelection) $del.on('click', batchDelete);
         $toolbar.append($del);
     }
@@ -1177,7 +1330,7 @@ jQuery(async () => {
     // ===== 批量操作 =====
     async function batchAddTags() {
         if (selectedAvatars.size === 0) return;
-        const input = await showBatchInput('批量打标签', `给 ${selectedAvatars.size} 个人设添加标签（逗号分隔多个）：`);
+        const input = await showBatchInput(pt('batchAddTagsTitle'), pt('batchAddTagsMsg', { count: selectedAvatars.size }));
         if (!input) return;
         const parts = input.split(/[,，]/).map(s => s.trim()).filter(Boolean);
         if (parts.length === 0) return;
@@ -1190,16 +1343,16 @@ jQuery(async () => {
             }
         } catch (e) {
             console.error(LOG, 'Batch add tags error:', e);
-            toastr.error('批量打标签出错');
+            toastr.error(pt('batchAddTagsError'));
         }
         if (totalAdded > 0) {
-            toastr.success(`已添加 ${totalAdded} 条标签`);
+            toastr.success(pt('batchTagsAdded', { count: totalAdded }));
             applyFiltersAndRender();
             renderFilterArea();
             const cur = detectCurrentPersona() || currentPersonaAvatar;
             if (cur) renderTagEditor(cur);
         } else {
-            toastr.warning('所有标签已存在');
+            toastr.warning(pt('allTagsAlreadyExist'));
         }
     }
 
@@ -1214,10 +1367,10 @@ jQuery(async () => {
         }
         const allTags = Object.keys(tagCounts);
         if (allTags.length === 0) {
-            toastr.warning('选中的人设没有标签');
+            toastr.warning(pt('selectedPersonasNoTags'));
             return;
         }
-        const toRemove = await showBatchTagPicker('批量删标签', `从 ${selectedAvatars.size} 个人设中移除标签：`, allTags, tagCounts);
+        const toRemove = await showBatchTagPicker(pt('batchRemoveTagsTitle'), pt('batchRemoveTagsMsg', { count: selectedAvatars.size }), allTags, tagCounts);
         if (!toRemove || toRemove.length === 0) return;
         let totalRemoved = 0;
         try {
@@ -1231,10 +1384,10 @@ jQuery(async () => {
             }
         } catch (e) {
             console.error(LOG, 'Batch remove tags error:', e);
-            toastr.error('批量删标签出错');
+            toastr.error(pt('batchRemoveTagsError'));
         }
         if (totalRemoved > 0) {
-            toastr.success(`已移除 ${totalRemoved} 条标签`);
+            toastr.success(pt('batchTagsRemoved', { count: totalRemoved }));
             applyFiltersAndRender();
             renderFilterArea();
             const cur = detectCurrentPersona() || currentPersonaAvatar;
@@ -1246,8 +1399,8 @@ jQuery(async () => {
         if (selectedAvatars.size === 0) return;
         const ctx = SillyTavern.getContext();
         const confirmed = await showBatchConfirm(
-            '批量删除',
-            `确定要删除 ${selectedAvatars.size} 个人设吗？此操作不可撤销！`
+            pt('batchDeleteTitle'),
+            pt('batchDeleteMsg', { count: selectedAvatars.size })
         );
         if (!confirmed) return;
 
@@ -1285,10 +1438,10 @@ jQuery(async () => {
             renderFilterArea();
             renderBatchToolbar();
             renderTagEditor(detectCurrentPersona() || currentPersonaAvatar);
-            toastr.success(`已删除 ${deleted} 个人设`);
+            toastr.success(pt('batchDeleted', { count: deleted }));
         }
         if (failed.length > 0) {
-            toastr.error(`${failed.length} 个删除失败：${failed.join('、')}`);
+            toastr.error(pt('batchDeleteFailed', { count: failed.length, names: failed.join(pt('listSeparator')) }));
         }
     }
 
@@ -1296,16 +1449,21 @@ jQuery(async () => {
         return new Promise(resolve => {
             const $overlay = $('<div class="persona-batch-overlay"></div>');
             const $dialog = $(`<div class="persona-batch-dialog">
-                <div class="persona-batch-dialog-title">${title}</div>
-                <div class="persona-batch-dialog-msg">${message}</div>
+                <div class="persona-batch-dialog-title"></div>
+                <div class="persona-batch-dialog-msg"></div>
                 <form class="persona-batch-dialog-form" autocomplete="off">
-                    <input type="text" class="text_pole persona-batch-dialog-input" placeholder="标签1, 标签2, ..." enterkeyhint="done">
+                    <input type="text" class="text_pole persona-batch-dialog-input" enterkeyhint="done">
                 </form>
                 <div class="persona-batch-dialog-buttons">
-                    <span class="persona-batch-btn persona-batch-dialog-cancel">取消</span>
-                    <span class="persona-batch-btn persona-batch-dialog-ok">确定</span>
+                    <span class="persona-batch-btn persona-batch-dialog-cancel"></span>
+                    <span class="persona-batch-btn persona-batch-dialog-ok"></span>
                 </div>
             </div>`);
+            $dialog.find('.persona-batch-dialog-title').text(title);
+            $dialog.find('.persona-batch-dialog-msg').text(message);
+            $dialog.find('.persona-batch-dialog-input').attr('placeholder', pt('tagExamplesPlaceholder'));
+            $dialog.find('.persona-batch-dialog-cancel').text(pt('cancelBtn'));
+            $dialog.find('.persona-batch-dialog-ok').text(pt('confirmBtn'));
             $overlay.append($dialog);
             $overlay.on('mousedown pointerdown touchstart', (e) => e.stopPropagation());
             $('body').append($overlay);
@@ -1334,13 +1492,17 @@ jQuery(async () => {
         return new Promise(resolve => {
             const $overlay = $('<div class="persona-batch-overlay"></div>');
             const $dialog = $(`<div class="persona-batch-dialog">
-                <div class="persona-batch-dialog-title">${title}</div>
-                <div class="persona-batch-dialog-msg">${message}</div>
+                <div class="persona-batch-dialog-title"></div>
+                <div class="persona-batch-dialog-msg"></div>
                 <div class="persona-batch-dialog-buttons">
-                    <span class="persona-batch-btn persona-batch-dialog-cancel">取消</span>
-                    <span class="persona-batch-btn persona-batch-dialog-ok">移除选中</span>
+                    <span class="persona-batch-btn persona-batch-dialog-cancel"></span>
+                    <span class="persona-batch-btn persona-batch-dialog-ok"></span>
                 </div>
             </div>`);
+            $dialog.find('.persona-batch-dialog-title').text(title);
+            $dialog.find('.persona-batch-dialog-msg').text(message);
+            $dialog.find('.persona-batch-dialog-cancel').text(pt('cancelBtn'));
+            $dialog.find('.persona-batch-dialog-ok').text(pt('removeSelectedBtn'));
             $dialog.find('.persona-batch-dialog-msg').after($picker);
             $dialog.find('.persona-batch-tag-pill').on('click', function () {
                 const tag = $(this).attr('data-tag');
@@ -1361,13 +1523,17 @@ jQuery(async () => {
         return new Promise(resolve => {
             const $overlay = $('<div class="persona-batch-overlay"></div>');
             const $dialog = $(`<div class="persona-batch-dialog">
-                <div class="persona-batch-dialog-title">${title}</div>
-                <div class="persona-batch-dialog-msg">${message}</div>
+                <div class="persona-batch-dialog-title"></div>
+                <div class="persona-batch-dialog-msg"></div>
                 <div class="persona-batch-dialog-buttons">
-                    <span class="persona-batch-btn persona-batch-dialog-cancel">取消</span>
-                    <span class="persona-batch-btn persona-batch-btn-danger persona-batch-dialog-ok">确定删除</span>
+                    <span class="persona-batch-btn persona-batch-dialog-cancel"></span>
+                    <span class="persona-batch-btn persona-batch-btn-danger persona-batch-dialog-ok"></span>
                 </div>
             </div>`);
+            $dialog.find('.persona-batch-dialog-title').text(title);
+            $dialog.find('.persona-batch-dialog-msg').text(message);
+            $dialog.find('.persona-batch-dialog-cancel').text(pt('cancelBtn'));
+            $dialog.find('.persona-batch-dialog-ok').text(pt('confirmDeleteBtn'));
             $overlay.append($dialog);
             $overlay.on('mousedown pointerdown touchstart', (e) => e.stopPropagation());
             $('body').append($overlay);
@@ -1444,7 +1610,7 @@ jQuery(async () => {
 
     function buildPersonaCard(avatarId, index, noDescText) {
         const ctx = SillyTavern.getContext();
-        const personaName = ctx.powerUserSettings.personas?.[avatarId] || '[未命名人设]';
+        const personaName = ctx.powerUserSettings.personas?.[avatarId] || pt('unnamedPersona');
         const desc = ctx.powerUserSettings.persona_descriptions?.[avatarId]?.description || '';
         const title = ctx.powerUserSettings.persona_descriptions?.[avatarId]?.title || '';
         noDescText = noDescText || '';
@@ -1495,17 +1661,19 @@ jQuery(async () => {
             $info.append($tags);
         }
 
-        // 锁定状态标签（保留 ST 原生结构，主题 CSS 兼容）
+        // 锁定状态标签（保留 ST 原生结构，文字跟随 ST 语言）
+        const chatLabel = typeof ctx.translate === 'function' ? ctx.translate('Chat') : 'Chat';
+        const charLabel = typeof ctx.translate === 'function' ? ctx.translate('Character') : 'Character';
         $info.append(`<div class="avatar_container_states buttons_block">
             <div class="locked_to_chat_label avatar_state has_hover_label menu_button menu_button_icon disabled">
                 <i class="icon fa-solid fa-lock fa-fw"></i>
                 <i class="label_icon icon fa-solid fa-comments fa-fw"></i>
-                <div class="label">Chat</div>
+                <div class="label">${escapeHtml(chatLabel)}</div>
             </div>
             <div class="locked_to_character_label avatar_state has_hover_label menu_button menu_button_icon disabled">
                 <i class="icon fa-solid fa-lock fa-fw"></i>
                 <i class="label_icon icon fa-solid fa-user fa-fw"></i>
-                <div class="label">Character</div>
+                <div class="label">${escapeHtml(charLabel)}</div>
             </div>
         </div>`);
 
@@ -1538,7 +1706,7 @@ jQuery(async () => {
         $block.empty();
 
         if (filteredList.length === 0) {
-            $block.append('<div class="persona-empty-placeholder">暂无匹配的人设</div>');
+            $block.append($('<div class="persona-empty-placeholder"></div>').text(pt('noMatchingPersonas')));
         } else {
             const ctx = contextList || getContextList();
             for (const avatarId of filteredList) {
@@ -1857,7 +2025,7 @@ jQuery(async () => {
 
             const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
             downloadFile(data, `personas_${timestamp}.json`);
-            toastr.success('人设备份已导出（含标签和排序数据）');
+            toastr.success(pt('backupExported'));
         }, true);
 
         // 恢复拦截：读取文件提取插件数据后放行给 ST
@@ -1875,7 +2043,7 @@ jQuery(async () => {
                 const data = JSON.parse(text);
                 if (data.personaTags) {
                     const count = mergePersonaTagsData(data.personaTags);
-                    toastr.success(`已恢复 ${count} 条标签映射`);
+                    toastr.success(pt('backupTagsRestored', { count }));
                     hasPluginData = true;
                 }
             } catch (err) {
@@ -1883,7 +2051,7 @@ jQuery(async () => {
             }
 
             if (!hasPluginData) {
-                toastr.info('备份文件中无标签数据，仅恢复基础人设');
+                toastr.info(pt('backupNoPluginData'));
             }
 
             $(e.target).trigger('change');
@@ -1910,9 +2078,9 @@ jQuery(async () => {
     function enhanceDuplicateDialog(dialog) {
         dialog.classList.add('persona-dupe-modified');
 
-        // 汉化英文弹窗标题（已是中文或其他语言时保留原样）
+        // 仅在简体中文模式下补汉化英文弹窗标题（其他语言保持 ST 原生文案）
         const contentEl = dialog.querySelector('.popup-content');
-        if (contentEl) {
+        if (isZhCn() && contentEl) {
             contentEl.querySelectorAll('h3').forEach(h => {
                 if (h.textContent.includes('duplicate this persona')) {
                     h.textContent = '复制人设';
@@ -1924,7 +2092,7 @@ jQuery(async () => {
         const cancelBtn = dialog.querySelector('.popup-button-cancel');
 
         if (cancelBtn) {
-            if (/^(Cancel|No|否)$/i.test(cancelBtn.textContent.trim())) {
+            if (isZhCn() && /^(Cancel|No|否)$/i.test(cancelBtn.textContent.trim())) {
                 cancelBtn.textContent = '取消';
             }
             cancelBtn.addEventListener('click', () => {
@@ -1949,14 +2117,14 @@ jQuery(async () => {
                 const tagCheck = document.createElement('input');
                 tagCheck.type = 'checkbox';
                 tagCheck.checked = lastDupeCopyTags;
-                tagLabel.append(tagCheck, ' 复制标签');
+                tagLabel.append(tagCheck, ' ' + pt('dupeCopyTags'));
 
                 const connLabel = document.createElement('label');
                 connLabel.className = 'persona-dupe-checkbox';
                 const connCheck = document.createElement('input');
                 connCheck.type = 'checkbox';
                 connCheck.checked = lastDupeCopyConnections;
-                connLabel.append(connCheck, ' 复制绑定关系');
+                connLabel.append(connCheck, ' ' + pt('dupeCopyConnections'));
 
                 optionsDiv.append(tagLabel, connLabel);
 
@@ -1978,7 +2146,7 @@ jQuery(async () => {
                 const confirmBtn = document.createElement('div');
                 confirmBtn.className = 'menu_button popup-button-custom result-control';
                 confirmBtn.tabIndex = 0;
-                confirmBtn.textContent = '复制';
+                confirmBtn.textContent = pt('dupeConfirmBtn');
                 confirmBtn.addEventListener('click', () => {
                     syncDupeOptions();
                     okBtn.click();
@@ -2087,7 +2255,7 @@ jQuery(async () => {
             const pid = avatarEl.dataset.pid;
             if (!pid) return;
 
-            const name = personas[pid] || '[未命名]';
+            const name = personas[pid] || pt('unnamedShort');
             const tags = getPersonaTags(pid);
 
             const infoDiv = document.createElement('div');
@@ -2116,9 +2284,9 @@ jQuery(async () => {
             avatarEl.appendChild(infoDiv);
         });
 
-        // 弹窗文字汉化
+        // 弹窗文字补汉化（仅简体中文模式生效，避免覆盖其他语言的 ST 原生文案）
         const dialog = personaList.closest('dialog');
-        if (dialog) {
+        if (dialog && isZhCn()) {
             dialog.querySelectorAll('h3').forEach(h => {
                 if (h.textContent.trim() === 'Select Persona') h.textContent = '选择人设';
             });
@@ -2165,7 +2333,8 @@ jQuery(async () => {
                 });
             }
 
-            // 汉化 ST 原生弹窗 & 注入新建人设标签框
+            // 注入新建人设标签框（全语言） & 补汉化 ST 原生弹窗（仅简体中文模式）
+            const zhCn = isZhCn();
             document.querySelectorAll('dialog.popup:not(.persona-cn-done)').forEach(dialog => {
                 const content = dialog.querySelector('.popup-content');
                 if (!content) return;
@@ -2177,20 +2346,30 @@ jQuery(async () => {
                 const isRename = matchesSTText(text, 'Rename Persona', ['Rename Persona', '重命名人设', '重新命名使用者角色']);
                 const isCreate = isNamePrompt && !isRename;
                 if (isNamePrompt || isRename) {
-                    content.querySelectorAll('h3').forEach(h => {
-                        if (h.textContent.includes('Rename Persona')) h.textContent = '重命名人设';
-                        if (h.textContent.includes('Enter a name for this persona')) h.textContent = '请输入人设名称：';
-                    });
-                    content.querySelectorAll('label').forEach(l => {
-                        if (l.textContent.includes('Persona Title')) l.textContent = '人设标题（可选，仅用于显示）';
-                    });
+                    if (zhCn) {
+                        content.querySelectorAll('h3').forEach(h => {
+                            if (h.textContent.includes('Rename Persona')) h.textContent = '重命名人设';
+                            if (h.textContent.includes('Enter a name for this persona')) h.textContent = '请输入人设名称：';
+                        });
+                        content.querySelectorAll('label').forEach(l => {
+                            if (l.textContent.includes('Persona Title')) l.textContent = '人设标题（可选，仅用于显示）';
+                        });
+                    }
                     // 创建弹窗注入标签输入框（全语言通吃）
                     if (isCreate && !dialog.querySelector('.persona-create-tags-input')) {
                         const controls = dialog.querySelector('.popup-controls') || dialog.querySelector('.popup-content');
                         if (controls) {
                             const tagDiv = document.createElement('div');
                             tagDiv.style.cssText = 'margin: 8px 0; width: 100%;';
-                            tagDiv.innerHTML = '<label style="font-size:0.9em;opacity:0.7;">人设标签（可选，逗号分隔多个）</label><input class="text_pole result-control persona-create-tags-input" type="text" placeholder="标签1, 标签2, ..." style="width:100%;box-sizing:border-box;margin-top:4px;">';
+                            const tagLabelEl = document.createElement('label');
+                            tagLabelEl.style.cssText = 'font-size:0.9em;opacity:0.7;';
+                            tagLabelEl.textContent = pt('createTagsLabel');
+                            const tagInputEl = document.createElement('input');
+                            tagInputEl.className = 'text_pole result-control persona-create-tags-input';
+                            tagInputEl.type = 'text';
+                            tagInputEl.placeholder = pt('tagExamplesPlaceholder');
+                            tagInputEl.style.cssText = 'width:100%;box-sizing:border-box;margin-top:4px;';
+                            tagDiv.append(tagLabelEl, tagInputEl);
                             const popupContent = dialog.querySelector('.popup-content');
                             if (popupContent) popupContent.appendChild(tagDiv);
                         }
@@ -2240,7 +2419,7 @@ jQuery(async () => {
                     }
                     matched = true;
                 }
-                if (text.includes('Cancel if you')) {
+                if (zhCn && text.includes('Cancel if you')) {
                     content.querySelectorAll('h3').forEach(h => {
                         if (h.textContent.includes('Enter a name for this persona')) h.textContent = '请输入人设名称：';
                     });
@@ -2257,8 +2436,8 @@ jQuery(async () => {
                     });
                     matched = true;
                 }
-                // 删除确认弹窗
-                if (text.includes('Are you sure you want to delete this avatar')) {
+                // 删除确认弹窗（仅简体中文模式补汉化）
+                if (zhCn && text.includes('Are you sure you want to delete this avatar')) {
                     content.querySelectorAll('h3').forEach(h => {
                         if (h.textContent.includes('Delete Persona')) h.textContent = '删除人设';
                     });
@@ -2269,16 +2448,18 @@ jQuery(async () => {
                     });
                     matched = true;
                 }
-                // 描述输入弹窗（上传头像创建人设的第二步，刷新待创建标签超时）
+                // 描述输入弹窗（上传头像创建人设的第二步，全语言刷新待创建标签超时，仅简体中文补汉化）
                 if (matchesSTText(text, 'Enter a description for this persona:', ['Enter a description for this persona', '描述这个用户设定', '輸入此使用者角色的描述'])) {
-                    content.querySelectorAll('h3').forEach(h => {
-                        if (h.textContent.includes('Enter a description')) h.textContent = '请输入人设描述：';
-                    });
-                    content.querySelectorAll('.multiline, p, div').forEach(el => {
-                        if (el.textContent.includes('You can always add or change it later')) {
-                            el.textContent = '之后还可以修改。';
-                        }
-                    });
+                    if (zhCn) {
+                        content.querySelectorAll('h3').forEach(h => {
+                            if (h.textContent.includes('Enter a description')) h.textContent = '请输入人设描述：';
+                        });
+                        content.querySelectorAll('.multiline, p, div').forEach(el => {
+                            if (el.textContent.includes('You can always add or change it later')) {
+                                el.textContent = '之后还可以修改。';
+                            }
+                        });
+                    }
                     if (pendingCreationTags) {
                         const refreshCreationTs = () => {
                             if (pendingCreationTags) pendingCreationTags.timestamp = Date.now();
@@ -2294,10 +2475,12 @@ jQuery(async () => {
 
                 if (matched) {
                     dialog.classList.add('persona-cn-done');
-                    const okBtn = dialog.querySelector('.popup-button-ok');
-                    const cancelBtn = dialog.querySelector('.popup-button-cancel');
-                    if (okBtn && okBtn.textContent.trim() === 'OK') okBtn.textContent = '保存';
-                    if (cancelBtn && cancelBtn.textContent.trim() === 'Cancel') cancelBtn.textContent = '取消';
+                    if (zhCn) {
+                        const okBtn = dialog.querySelector('.popup-button-ok');
+                        const cancelBtn = dialog.querySelector('.popup-button-cancel');
+                        if (okBtn && okBtn.textContent.trim() === 'OK') okBtn.textContent = '保存';
+                        if (cancelBtn && cancelBtn.textContent.trim() === 'Cancel') cancelBtn.textContent = '取消';
+                    }
                 }
             });
         }
@@ -2308,7 +2491,7 @@ jQuery(async () => {
         console.log(LOG, 'Initializing...');
 
         getSettings();
-        await refreshServerAvatars();
+        await Promise.all([loadLocale(), refreshServerAvatars()]);
         purgeOrphanedSTEntries();
         purgeOrphanedEntries();
         purgeOrphanedOrders();

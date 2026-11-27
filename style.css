@@ -465,7 +465,7 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
     font-size: 0.9em;
     text-align: center;
     min-width: 60px;
-    max-width: 80px;
+    white-space: nowrap;
     background: rgba(100, 180, 255, 0.3);
     border: 1px solid rgba(100, 180, 255, 0.5);
 }
@@ -771,6 +771,7 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
 
 .persona-batch-dialog-buttons {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
 }
