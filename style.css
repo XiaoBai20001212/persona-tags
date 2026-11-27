@@ -12,6 +12,7 @@
 .persona-tags-header {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
     font-weight: bold;
     margin-bottom: 6px;
@@ -68,6 +69,99 @@
     opacity: 0.5;
     font-style: italic;
     padding: 2px 0;
+}
+
+/* --- Right Column: Existing Tags Quick Picker --- */
+.persona-existing-tags-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.85em;
+    font-weight: normal;
+    border: 1px solid var(--SmartThemeBorderColor);
+    color: var(--SmartThemeBodyColor);
+    background: var(--SmartThemeBlurTintColor);
+    opacity: 0.75;
+    user-select: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: opacity 0.2s, border-color 0.2s;
+}
+
+.persona-existing-tags-toggle:hover {
+    opacity: 1;
+}
+
+.persona-existing-tags-toggle.open {
+    opacity: 1;
+    border-color: var(--SmartThemeBodyColor);
+}
+
+.persona-existing-tags-toggle.disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
+.persona-existing-tags-panel {
+    display: none;
+    margin-bottom: 6px;
+    padding: 6px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background: var(--SmartThemeBlurTintColor);
+    max-height: clamp(110px, 22vh, 220px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.persona-existing-tags-panel.open {
+    display: block;
+}
+
+.persona-existing-tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+}
+
+.persona-existing-tag-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.82em;
+    line-height: 1.4;
+    cursor: pointer;
+    user-select: none;
+    opacity: 0.82;
+    word-break: break-word;
+    transition: opacity 0.15s, transform 0.1s;
+}
+
+.persona-existing-tag-btn::before {
+    content: '+';
+    margin-right: 3px;
+    opacity: 0.75;
+    font-weight: bold;
+}
+
+.persona-existing-tag-btn:hover {
+    opacity: 1;
+}
+
+.persona-existing-tag-btn:active {
+    transform: scale(0.96);
+}
+
+@media (pointer: coarse) {
+    .persona-existing-tag-btn {
+        padding: 4px 10px;
+    }
 }
 
 /* --- Left Column: Tag Filter Dropdown --- */
@@ -405,8 +499,66 @@ dialog.popup.persona-dupe-modified .popup-button-custom {
 #persona_pagination_container {
     visibility: hidden;
     height: 0;
+    width: 0;
+    flex: 0 0 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
     overflow: hidden;
     pointer-events: none;
+}
+
+/* --- Left Column: Quick Scroll Controls --- */
+.persona_management_left_column > .flex-container.marginBot10 {
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+#persona_search_bar {
+    min-width: 70px;
+}
+
+.persona-quick-scroll {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.persona-scroll-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 28px;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+    font-size: 0.82em;
+}
+
+.persona-scroll-step-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.persona-scroll-step {
+    width: 38px !important;
+    height: 28px;
+    padding: 2px 3px !important;
+    margin: 0 !important;
+    text-align: center;
+    font-size: 0.82em !important;
+    box-sizing: border-box;
+    -moz-appearance: textfield;
+}
+
+.persona-scroll-step::-webkit-outer-spin-button,
+.persona-scroll-step::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 /* --- Card Checkbox --- */

@@ -264,17 +264,21 @@ jQuery(async () => {
     function purgeOrphanedOrders() {
         const obj = ensurePersonaOrderObj();
         const ctx = SillyTavern.getContext();
-        if (!ctx.characters || !ctx.groups) return;
+        const hasChars = Array.isArray(ctx.characters) && ctx.characters.length > 0;
+        const hasGroups = Array.isArray(ctx.groups) && ctx.groups.length > 0;
         let changed = false;
         for (const key of Object.keys(obj)) {
             if (key === '_all') continue;
-            let valid = false;
+            let valid = true;
             if (key.startsWith('char:')) {
+                // 启动阶段 characters 尚未加载完时跳过清理，避免误删单角色排序
+                if (!hasChars) continue;
                 const charAvatar = key.slice(5);
-                valid = ctx.characters?.some(c => c?.avatar === charAvatar);
+                valid = ctx.characters.some(c => c?.avatar === charAvatar);
             } else if (key.startsWith('group:')) {
+                if (!hasGroups) continue;
                 const groupId = key.slice(6);
-                valid = ctx.groups?.some(g => g.id === groupId);
+                valid = ctx.groups.some(g => g?.id === groupId);
             }
             if (!valid) {
                 console.log(LOG, 'Purging orphaned persona order:', key);
@@ -347,6 +351,8 @@ jQuery(async () => {
 
     // ===== 当前人设跟踪 =====
     let currentPersonaAvatar = null;
+    let existingTagsOpen = false;
+    let lastPickerAvatar = null;
 
     function detectCurrentPersona() {
         const selected = $('#user_avatar_block .avatar-container.selected');
@@ -383,6 +389,7 @@ jQuery(async () => {
         if (!avatarId) {
             $list.html('<span class="persona-tags-empty">请先选择一个人设</span>');
             $section.find('#persona-tag-input').val('').prop('disabled', true);
+            renderExistingTagsPicker(null);
             return;
         }
 
@@ -407,6 +414,61 @@ jQuery(async () => {
                 $list.append($tag);
             }
         }
+
+        renderExistingTagsPicker(avatarId);
+    }
+
+    function renderExistingTagsPicker(avatarId) {
+        const $toggle = $('#persona-existing-tags-toggle');
+        const $panel = $('#persona-existing-tags-panel');
+        if (!$toggle.length || !$panel.length) return;
+
+        const isOpen = Boolean(avatarId && existingTagsOpen);
+        $toggle.toggleClass('disabled', !avatarId).toggleClass('open', isOpen);
+        $toggle.find('.persona-existing-tags-caret')
+            .toggleClass('fa-caret-up', isOpen)
+            .toggleClass('fa-caret-down', !isOpen);
+        $panel.toggleClass('open', isOpen);
+
+        if (!isOpen) {
+            lastPickerAvatar = avatarId;
+            return;
+        }
+
+        const prevScrollTop = (lastPickerAvatar === avatarId) ? $panel[0].scrollTop : 0;
+        lastPickerAvatar = avatarId;
+
+        const allTags = getAllTags();
+        const currentTagSet = new Set(getPersonaTags(avatarId));
+        const availableTags = allTags.filter(t => !currentTagSet.has(t));
+
+        $panel.empty();
+
+        if (allTags.length === 0) {
+            $panel.append('<span class="persona-tags-empty">暂无已有标签</span>');
+        } else if (availableTags.length === 0) {
+            $panel.append('<span class="persona-tags-empty">所有已有标签均已添加</span>');
+        } else {
+            const $list = $('<div class="persona-existing-tags-list"></div>');
+            for (const tag of availableTags) {
+                const color = getTagColor(tag);
+                const $btn = $('<span class="persona-existing-tag-btn"></span>')
+                    .css({ background: color.bg, color: color.fg })
+                    .text(tag);
+                $btn.on('click', () => {
+                    if (!currentPersonaAvatar) return;
+                    if (addTagToPersona(currentPersonaAvatar, tag)) {
+                        renderTagEditor(currentPersonaAvatar);
+                        renderFilterArea();
+                        applyFiltersAndRender();
+                    }
+                });
+                $list.append($btn);
+            }
+            $panel.append($list);
+        }
+
+        $panel[0].scrollTop = prevScrollTop;
     }
 
     function injectTagEditor() {
@@ -433,7 +495,11 @@ jQuery(async () => {
                 <div class="persona-tags-header">
                     <i class="fa-solid fa-tags"></i>
                     <span>人设标签</span>
+                    <span id="persona-existing-tags-toggle" class="persona-existing-tags-toggle disabled" title="展开/收起已有标签">
+                        <i class="fa-solid fa-plus"></i> 已有标签 <i class="fa-solid fa-caret-down persona-existing-tags-caret"></i>
+                    </span>
                 </div>
+                <div id="persona-existing-tags-panel" class="persona-existing-tags-panel"></div>
                 <div class="persona-tags-list"></div>
                 <form id="persona-tag-form" autocomplete="off">
                     <input id="persona-tag-input" class="text_pole" type="text"
@@ -442,6 +508,13 @@ jQuery(async () => {
             </div>
         `;
         $target.after(html);
+
+        // 已有标签快速选择展开/收起
+        $('#persona-existing-tags-toggle').on('click', () => {
+            if (!currentPersonaAvatar) return;
+            existingTagsOpen = !existingTagsOpen;
+            renderExistingTagsPicker(currentPersonaAvatar);
+        });
 
         // 位置编辑器：form submit 收起键盘（兼容安卓），按钮触发移动
         $('#persona-position-form').on('submit', (e) => {
@@ -543,6 +616,7 @@ jQuery(async () => {
             }
             renderFilterArea();
             updateViewModeInfo();
+            if (currentPersonaAvatar) renderTagEditor(currentPersonaAvatar);
             $icon.removeClass('fa-spin');
             if (ok) toastr.success('已刷新');
             else toastr.error('刷新失败，请检查网络');
@@ -561,6 +635,201 @@ jQuery(async () => {
         });
 
         updateViewModeInfo();
+    }
+
+    // ===== 快捷楼层滚动（左栏顶部：[↑] [↓] [步长]） =====
+    const DEFAULT_SCROLL_STEP = 10;
+
+    function getScrollStep() {
+        const raw = Number(getSettings().scrollStep);
+        if (Number.isInteger(raw) && raw >= 1 && raw <= 999) return raw;
+        return DEFAULT_SCROLL_STEP;
+    }
+
+    function updateQuickScrollTooltips(step) {
+        $('#persona-scroll-up').attr('title', `向上跳 ${step} 个（长按 0.5 秒直达顶部）`);
+        $('#persona-scroll-down').attr('title', `向下跳 ${step} 个（长按 0.5 秒直达底部）`);
+    }
+
+    function setScrollStep(step) {
+        const num = Math.max(1, Math.min(999, Math.floor(Number(step) || DEFAULT_SCROLL_STEP)));
+        getSettings().scrollStep = num;
+        saveSettings();
+        updateQuickScrollTooltips(num);
+        return num;
+    }
+
+    function quickScrollPersonas(direction) {
+        const block = document.getElementById('user_avatar_block');
+        if (!block) return;
+        const cards = [...block.querySelectorAll('.avatar-container')];
+        if (cards.length === 0) return;
+
+        const blockRect = block.getBoundingClientRect();
+        const blockStyle = getComputedStyle(block);
+        const contentTop = blockRect.top
+            + (parseFloat(blockStyle.borderTopWidth) || 0)
+            + (parseFloat(blockStyle.paddingTop) || 0);
+        const tolerance = 4;
+        let currentIndex = cards.length - 1;
+        for (let i = 0; i < cards.length; i++) {
+            if (cards[i].getBoundingClientRect().top - contentTop >= -tolerance) {
+                currentIndex = i;
+                break;
+            }
+        }
+
+        const step = getScrollStep();
+        const targetIndex = direction > 0
+            ? Math.min(cards.length - 1, currentIndex + step)
+            : Math.max(0, currentIndex - step);
+        const targetCard = cards[targetIndex];
+        if (!targetCard) return;
+
+        let delta = targetCard.getBoundingClientRect().top - contentTop;
+        if (direction < 0 && targetIndex === 0 && delta >= -tolerance) {
+            block.scrollTop = 0;
+            return;
+        }
+        if (Math.abs(delta) <= tolerance) {
+            // 网格视图下目标与当前在同一行时，至少移动到相邻行
+            if (direction > 0) {
+                for (let i = targetIndex + 1; i < cards.length; i++) {
+                    const d = cards[i].getBoundingClientRect().top - contentTop;
+                    if (d > tolerance) { delta = d; break; }
+                }
+            } else {
+                for (let i = targetIndex - 1; i >= 0; i--) {
+                    const d = cards[i].getBoundingClientRect().top - contentTop;
+                    if (d < -tolerance) { delta = d; break; }
+                }
+            }
+        }
+        // 防止边界处反向滚动
+        if ((direction > 0 && delta <= 0) || (direction < 0 && delta >= 0)) return;
+        block.scrollTop += delta;
+    }
+
+    function quickScrollToEdge(direction) {
+        const block = document.getElementById('user_avatar_block');
+        if (!block) return;
+        block.scrollTop = direction > 0 ? block.scrollHeight : 0;
+    }
+
+    function bindQuickScrollButton($btn, direction) {
+        let pressTimer = null;
+        let longPressed = false;
+        let startX = 0;
+        let startY = 0;
+        let activePointerId = null;
+
+        const cleanup = () => {
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+            activePointerId = null;
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            document.removeEventListener('pointercancel', onCancel);
+        };
+
+        const onMove = (ev) => {
+            if (ev.pointerId !== activePointerId) return;
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+            if (dx * dx + dy * dy > 144) {
+                cleanup();
+            }
+        };
+
+        const onUp = (ev) => {
+            if (ev.pointerId !== activePointerId) return;
+            const didLongPress = longPressed;
+            cleanup();
+            if (!didLongPress) {
+                quickScrollPersonas(direction);
+            }
+        };
+
+        const onCancel = (ev) => {
+            if (ev.pointerId !== activePointerId) return;
+            cleanup();
+        };
+
+        $btn.on('contextmenu', (e) => e.preventDefault());
+        $btn.on('pointerdown', (e) => {
+            if (e.button && e.button !== 0) return;
+            cleanup();
+            longPressed = false;
+            activePointerId = e.pointerId;
+            startX = e.clientX;
+            startY = e.clientY;
+            pressTimer = setTimeout(() => {
+                longPressed = true;
+                pressTimer = null;
+                quickScrollToEdge(direction);
+            }, 500);
+            document.addEventListener('pointermove', onMove);
+            document.addEventListener('pointerup', onUp);
+            document.addEventListener('pointercancel', onCancel);
+        });
+    }
+
+    function injectQuickScrollControls() {
+        if ($('#persona-quick-scroll').length) return;
+
+        const $anchor = $('#persona_pagination_container');
+        const $gridToggle = $('#persona_grid_toggle');
+        if (!$anchor.length && !$gridToggle.length) return;
+
+        const $wrap = $(`
+            <div id="persona-quick-scroll" class="persona-quick-scroll">
+                <span id="persona-scroll-up" class="menu_button persona-scroll-btn">
+                    <i class="fa-solid fa-arrow-up"></i>
+                </span>
+                <span id="persona-scroll-down" class="menu_button persona-scroll-btn">
+                    <i class="fa-solid fa-arrow-down"></i>
+                </span>
+                <form id="persona-scroll-step-form" class="persona-scroll-step-form" autocomplete="off" novalidate>
+                    <input id="persona-scroll-step" class="text_pole persona-scroll-step" type="number" min="1" max="999" inputmode="numeric" enterkeyhint="done" title="每次快捷滚动的楼层数">
+                </form>
+            </div>
+        `);
+
+        if ($anchor.length) $anchor.after($wrap);
+        else $gridToggle.before($wrap);
+
+        const step = getScrollStep();
+        const $input = $('#persona-scroll-step').val(step);
+        updateQuickScrollTooltips(step);
+
+        bindQuickScrollButton($('#persona-scroll-up'), -1);
+        bindQuickScrollButton($('#persona-scroll-down'), 1);
+
+        $('#persona-scroll-step-form').on('submit', (e) => {
+            e.preventDefault();
+            $input.blur();
+        });
+
+        $input.on('input', () => {
+            const raw = String($input.val() || '').trim();
+            if (!raw) return;
+            const parsed = parseInt(raw, 10);
+            if (!isNaN(parsed) && parsed >= 1 && parsed <= 999) {
+                setScrollStep(parsed);
+            }
+        });
+
+        $input.on('blur', () => {
+            const parsed = parseInt(String($input.val() || '').trim(), 10);
+            if (!isNaN(parsed) && parsed >= 1) {
+                const saved = setScrollStep(parsed);
+                $input.val(saved);
+            } else {
+                $input.val(getScrollStep());
+            }
+        });
     }
 
     function updateViewModeInfo() {
@@ -819,6 +1088,7 @@ jQuery(async () => {
         isDragging = false;
         renderFilterArea();
         applyFiltersAndRender();
+        if (currentPersonaAvatar) renderExistingTagsPicker(currentPersonaAvatar);
     }
 
     // ===== 批量选中状态 =====
@@ -926,6 +1196,8 @@ jQuery(async () => {
             toastr.success(`已添加 ${totalAdded} 条标签`);
             applyFiltersAndRender();
             renderFilterArea();
+            const cur = detectCurrentPersona() || currentPersonaAvatar;
+            if (cur) renderTagEditor(cur);
         } else {
             toastr.warning('所有标签已存在');
         }
@@ -965,7 +1237,7 @@ jQuery(async () => {
             toastr.success(`已移除 ${totalRemoved} 条标签`);
             applyFiltersAndRender();
             renderFilterArea();
-            const cur = detectCurrentPersona();
+            const cur = detectCurrentPersona() || currentPersonaAvatar;
             if (cur) renderTagEditor(cur);
         }
     }
@@ -1006,9 +1278,13 @@ jQuery(async () => {
             saveSettings();
             await refreshServerAvatars();
             purgeOrphanedEntries();
+            if (currentPersonaAvatar && serverAvatarSet && !serverAvatarSet.has(currentPersonaAvatar)) {
+                currentPersonaAvatar = null;
+            }
             applyFiltersAndRender();
             renderFilterArea();
             renderBatchToolbar();
+            renderTagEditor(detectCurrentPersona() || currentPersonaAvatar);
             toastr.success(`已删除 ${deleted} 个人设`);
         }
         if (failed.length > 0) {
@@ -1238,7 +1514,7 @@ jQuery(async () => {
         // 人设状态 class
         $card.toggleClass('default_persona', avatarId === ctx.powerUserSettings.default_persona);
         $card.toggleClass('selected', avatarId === currentPersonaAvatar);
-        const chatPersona = ctx.chat_metadata?.persona;
+        const chatPersona = (ctx.chatMetadata || ctx.chat_metadata)?.persona;
         $card.toggleClass('locked_to_chat', chatPersona === avatarId);
         const connections = ctx.powerUserSettings.persona_descriptions?.[avatarId]?.connections || [];
         let isCharLocked = false;
@@ -1536,6 +1812,18 @@ jQuery(async () => {
             }
         }
 
+        // scrollStep: 仅在当前未自定义时恢复
+        if (settings.scrollStep == null && Number.isInteger(Number(incoming.scrollStep))) {
+            const s = Number(incoming.scrollStep);
+            if (s >= 1 && s <= 999) {
+                settings.scrollStep = s;
+                if ($('#persona-scroll-step').length) {
+                    $('#persona-scroll-step').val(s);
+                    updateQuickScrollTooltips(s);
+                }
+            }
+        }
+
         saveSettings();
         return count;
     }
@@ -1563,6 +1851,7 @@ jQuery(async () => {
                     tagMap: settings.tagMap || {},
                     tagOrder: settings.tagOrder || [],
                     personaOrder: ensurePersonaOrderObj(),
+                    scrollStep: getScrollStep(),
                 },
             }, null, 2);
 
@@ -1608,10 +1897,20 @@ jQuery(async () => {
     let lastDupeCopyTags = false;
     let lastDupeCopyConnections = false;
 
+    /** 兼容 ST 多语言的弹窗文案匹配（优先使用 ST 当前语言包翻译，兼容英文及常见中文回退） */
+    function matchesSTText(actualText, enKey, fallbacks = []) {
+        if (!actualText) return false;
+        const ctx = SillyTavern.getContext();
+        const translated = typeof ctx.translate === 'function' ? ctx.translate(enKey) : '';
+        if (translated && actualText.includes(translated)) return true;
+        if (actualText.includes(enKey)) return true;
+        return fallbacks.some(f => f && actualText.includes(f));
+    }
+
     function enhanceDuplicateDialog(dialog) {
         dialog.classList.add('persona-dupe-modified');
 
-        // 汉化弹窗文字
+        // 汉化英文弹窗标题（已是中文或其他语言时保留原样）
         const contentEl = dialog.querySelector('.popup-content');
         if (contentEl) {
             contentEl.querySelectorAll('h3').forEach(h => {
@@ -1624,7 +1923,17 @@ jQuery(async () => {
         const okBtn = dialog.querySelector('.popup-button-ok');
         const cancelBtn = dialog.querySelector('.popup-button-cancel');
 
-        if (cancelBtn) cancelBtn.textContent = '取消';
+        if (cancelBtn) {
+            if (/^(Cancel|No|否)$/i.test(cancelBtn.textContent.trim())) {
+                cancelBtn.textContent = '取消';
+            }
+            cancelBtn.addEventListener('click', () => {
+                pendingDuplication = null;
+            }, true);
+        }
+        dialog.addEventListener('cancel', () => {
+            pendingDuplication = null;
+        });
 
         if (okBtn) {
             okBtn.style.display = 'none';
@@ -1651,34 +1960,63 @@ jQuery(async () => {
 
                 optionsDiv.append(tagLabel, connLabel);
 
+                // 勾选状态实时同步 + 刷新时间戳（兼顾按钮点击、键盘回车和长停留不超时）
+                const syncDupeOptions = () => {
+                    lastDupeCopyTags = tagCheck.checked;
+                    lastDupeCopyConnections = connCheck.checked;
+                    if (pendingDuplication) {
+                        pendingDuplication.copyTags = tagCheck.checked;
+                        pendingDuplication.copyConnections = connCheck.checked;
+                        pendingDuplication.timestamp = Date.now();
+                    }
+                };
+                tagCheck.addEventListener('change', syncDupeOptions);
+                connCheck.addEventListener('change', syncDupeOptions);
+                syncDupeOptions();
+
+                // 复制按钮
+                const confirmBtn = document.createElement('div');
+                confirmBtn.className = 'menu_button popup-button-custom result-control';
+                confirmBtn.tabIndex = 0;
+                confirmBtn.textContent = '复制';
+                confirmBtn.addEventListener('click', () => {
+                    syncDupeOptions();
+                    okBtn.click();
+                });
+
+                dialog.addEventListener('keydown', (e) => {
+                    if (e.isComposing) return;
+                    if (e.key === 'Enter') {
+                        if (document.activeElement?.closest('.popup-button-cancel')) {
+                            pendingDuplication = null;
+                            return;
+                        }
+                        syncDupeOptions();
+                        if (e.target === tagCheck || e.target === connCheck || e.target === confirmBtn) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            okBtn.click();
+                        }
+                    } else if (e.key === 'Escape') {
+                        pendingDuplication = null;
+                    }
+                }, true);
+
                 // 插入到弹窗内容区底部
                 const popupContent = dialog.querySelector('.popup-content');
                 if (popupContent) {
                     popupContent.appendChild(optionsDiv);
                 }
 
-                // 复制按钮
-                const confirmBtn = document.createElement('div');
-                confirmBtn.className = 'menu_button popup-button-custom result-control';
-                confirmBtn.textContent = '复制';
-                confirmBtn.addEventListener('click', () => {
-                    lastDupeCopyTags = tagCheck.checked;
-                    lastDupeCopyConnections = connCheck.checked;
-                    if (pendingDuplication) {
-                        pendingDuplication.copyTags = tagCheck.checked;
-                        pendingDuplication.copyConnections = connCheck.checked;
-                    }
-                    okBtn.click();
-                });
-
                 controls.prepend(confirmBtn);
+                confirmBtn.focus();
             }
         }
     }
 
     async function handlePendingCreationTags() {
         if (!pendingCreationTags) return;
-        if (Date.now() - pendingCreationTags.timestamp > 30000) {
+        if (Date.now() - pendingCreationTags.timestamp > 120000) {
             pendingCreationTags = null;
             return;
         }
@@ -1694,6 +2032,7 @@ jQuery(async () => {
                 await refreshServerAvatars();
                 applyFiltersAndRender();
                 renderFilterArea();
+                if (currentPersonaAvatar === id) renderTagEditor(id);
                 return;
             }
         }
@@ -1816,27 +2155,28 @@ jQuery(async () => {
                 }
             });
 
-            // 检测复制人设的确认弹窗并增强
+            // 检测复制人设的确认弹窗并增强（全语言兼容）
             if (pendingDuplication) {
                 document.querySelectorAll('dialog.popup:not(.persona-dupe-modified)').forEach(dialog => {
                     const text = dialog.querySelector('.popup-content')?.textContent || '';
-                    if (text.includes('duplicate this persona')) {
+                    if (matchesSTText(text, 'Are you sure you want to duplicate this persona?', ['duplicate this persona', '确定要复制此用户设定', '複製使用者角色'])) {
                         enhanceDuplicateDialog(dialog);
                     }
                 });
             }
 
-            // 汉化 ST 原生弹窗
+            // 汉化 ST 原生弹窗 & 注入新建人设标签框
             document.querySelectorAll('dialog.popup:not(.persona-cn-done)').forEach(dialog => {
                 const content = dialog.querySelector('.popup-content');
                 if (!content) return;
                 const text = content.textContent || '';
                 let matched = false;
 
-                // 创建/重命名人设弹窗
-                const isCreate = text.includes('Enter a name for this persona') && !text.includes('Rename Persona');
-                const isRename = text.includes('Rename Persona') || (text.includes('Enter a name for this persona') && text.includes('Rename'));
-                if (text.includes('Enter a name for this persona')) {
+                // 创建/重命名人设弹窗（全语言识别创建弹窗）
+                const isNamePrompt = matchesSTText(text, 'Enter a name for this persona:', ['Enter a name for this persona', '为此用户设定命名', '輸入使用者角色的名稱']);
+                const isRename = matchesSTText(text, 'Rename Persona', ['Rename Persona', '重命名人设', '重新命名使用者角色']);
+                const isCreate = isNamePrompt && !isRename;
+                if (isNamePrompt || isRename) {
                     content.querySelectorAll('h3').forEach(h => {
                         if (h.textContent.includes('Rename Persona')) h.textContent = '重命名人设';
                         if (h.textContent.includes('Enter a name for this persona')) h.textContent = '请输入人设名称：';
@@ -1844,34 +2184,59 @@ jQuery(async () => {
                     content.querySelectorAll('label').forEach(l => {
                         if (l.textContent.includes('Persona Title')) l.textContent = '人设标题（可选，仅用于显示）';
                     });
-                    // 创建弹窗注入标签输入框
+                    // 创建弹窗注入标签输入框（全语言通吃）
                     if (isCreate && !dialog.querySelector('.persona-create-tags-input')) {
                         const controls = dialog.querySelector('.popup-controls') || dialog.querySelector('.popup-content');
                         if (controls) {
                             const tagDiv = document.createElement('div');
                             tagDiv.style.cssText = 'margin: 8px 0; width: 100%;';
-                            tagDiv.innerHTML = '<label style="font-size:0.9em;opacity:0.7;">人设标签（可选，逗号分隔多个）</label><input class="text_pole persona-create-tags-input" type="text" placeholder="标签1, 标签2, ..." style="width:100%;box-sizing:border-box;margin-top:4px;">';
+                            tagDiv.innerHTML = '<label style="font-size:0.9em;opacity:0.7;">人设标签（可选，逗号分隔多个）</label><input class="text_pole result-control persona-create-tags-input" type="text" placeholder="标签1, 标签2, ..." style="width:100%;box-sizing:border-box;margin-top:4px;">';
                             const popupContent = dialog.querySelector('.popup-content');
                             if (popupContent) popupContent.appendChild(tagDiv);
                         }
-                        // 拦截保存按钮，记录待创建的标签
+                        const captureCreationTags = () => {
+                            const nameInput = dialog.querySelector('.popup-input');
+                            if (nameInput && !nameInput.value.trim()) {
+                                pendingCreationTags = null;
+                                return;
+                            }
+                            const tagInput = dialog.querySelector('.persona-create-tags-input');
+                            const raw = tagInput ? tagInput.value.trim() : '';
+                            const tags = raw.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+                            if (tags.length > 0) {
+                                const ctx = SillyTavern.getContext();
+                                pendingCreationTags = {
+                                    tags,
+                                    existingIds: new Set(Object.keys(ctx.powerUserSettings.personas)),
+                                    timestamp: Date.now(),
+                                };
+                                console.log(LOG, 'Pending creation tags:', tags);
+                            } else {
+                                pendingCreationTags = null;
+                            }
+                        };
+                        // 拦截保存按钮与键盘回车，记录待创建的标签
                         const okBtn = dialog.querySelector('.popup-button-ok');
+                        const cancelBtn = dialog.querySelector('.popup-button-cancel');
                         if (okBtn) {
-                            okBtn.addEventListener('click', () => {
-                                const tagInput = dialog.querySelector('.persona-create-tags-input');
-                                const raw = tagInput ? tagInput.value.trim() : '';
-                                const tags = raw.split(/[,，]/).map(s => s.trim()).filter(Boolean);
-                                if (tags.length > 0) {
-                                    const ctx = SillyTavern.getContext();
-                                    pendingCreationTags = {
-                                        tags,
-                                        existingIds: new Set(Object.keys(ctx.powerUserSettings.personas)),
-                                        timestamp: Date.now(),
-                                    };
-                                    console.log(LOG, 'Pending creation tags:', tags);
-                                }
-                            }, true);
+                            okBtn.addEventListener('click', captureCreationTags, true);
                         }
+                        if (cancelBtn) {
+                            cancelBtn.addEventListener('click', () => { pendingCreationTags = null; }, true);
+                        }
+                        dialog.addEventListener('cancel', () => { pendingCreationTags = null; });
+                        dialog.addEventListener('keydown', (e) => {
+                            if (e.isComposing) return;
+                            if (e.key === 'Enter') {
+                                if (document.activeElement?.closest('.popup-button-cancel')) {
+                                    pendingCreationTags = null;
+                                } else {
+                                    captureCreationTags();
+                                }
+                            } else if (e.key === 'Escape') {
+                                pendingCreationTags = null;
+                            }
+                        }, true);
                     }
                     matched = true;
                 }
@@ -1904,8 +2269,8 @@ jQuery(async () => {
                     });
                     matched = true;
                 }
-                // 描述输入弹窗
-                if (text.includes('Enter a description for this persona')) {
+                // 描述输入弹窗（上传头像创建人设的第二步，刷新待创建标签超时）
+                if (matchesSTText(text, 'Enter a description for this persona:', ['Enter a description for this persona', '描述这个用户设定', '輸入此使用者角色的描述'])) {
                     content.querySelectorAll('h3').forEach(h => {
                         if (h.textContent.includes('Enter a description')) h.textContent = '请输入人设描述：';
                     });
@@ -1914,6 +2279,16 @@ jQuery(async () => {
                             el.textContent = '之后还可以修改。';
                         }
                     });
+                    if (pendingCreationTags) {
+                        const refreshCreationTs = () => {
+                            if (pendingCreationTags) pendingCreationTags.timestamp = Date.now();
+                        };
+                        dialog.querySelector('.popup-button-ok')?.addEventListener('click', refreshCreationTs, true);
+                        dialog.querySelector('.popup-button-cancel')?.addEventListener('click', refreshCreationTs, true);
+                        dialog.addEventListener('keydown', (e) => {
+                            if (!e.isComposing && (e.key === 'Enter' || e.key === 'Escape')) refreshCreationTs();
+                        }, true);
+                    }
                     matched = true;
                 }
 
@@ -1940,6 +2315,7 @@ jQuery(async () => {
         setupBackupRestoreHooks();
         injectTagEditor();
         injectViewModeToggle();
+        injectQuickScrollControls();
         startPopupObserver();
 
         // 记录当前选中的人设（在接管渲染前从 DOM 读取）
@@ -1971,6 +2347,27 @@ jQuery(async () => {
             }, 100);
         });
 
+        // 监听 ST 生命周期事件：就绪后再清理孤儿排序 + 非列表切人设时同步右栏
+        const initCtx = SillyTavern.getContext();
+        if (initCtx.eventSource && initCtx.eventTypes) {
+            if (initCtx.eventTypes.APP_READY) {
+                initCtx.eventSource.on(initCtx.eventTypes.APP_READY, () => {
+                    purgeOrphanedOrders();
+                });
+            }
+            if (initCtx.eventTypes.PERSONA_CHANGED) {
+                initCtx.eventSource.on(initCtx.eventTypes.PERSONA_CHANGED, (avatarId) => {
+                    if (avatarId && avatarId !== currentPersonaAvatar) {
+                        currentPersonaAvatar = avatarId;
+                        renderTagEditor(avatarId);
+                        $('#user_avatar_block .avatar-container').each(function () {
+                            $(this).toggleClass('selected', $(this).attr('data-avatar-id') === avatarId);
+                        });
+                    }
+                });
+            }
+        }
+
         // 监听搜索框输入，用我们的渲染响应
         let searchDebounce = null;
         $(document).on('input', '#persona_search_bar', () => {
@@ -1981,14 +2378,14 @@ jQuery(async () => {
         // 监听复制按钮：捕获阶段优先于 ST 的处理，确保 pendingDuplication 先被设置
         document.addEventListener('click', (e) => {
             if (!e.target.closest('#persona_duplicate_button')) return;
-            const sourceAvatarId = detectCurrentPersona();
+            const sourceAvatarId = detectCurrentPersona() || currentPersonaAvatar;
             if (!sourceAvatarId) return;
             const ctx = SillyTavern.getContext();
             if (!ctx.powerUserSettings.personas[sourceAvatarId]) return;
             pendingDuplication = {
                 sourceAvatarId,
-                copyTags: false,
-                copyConnections: false,
+                copyTags: lastDupeCopyTags,
+                copyConnections: lastDupeCopyConnections,
                 existingIds: new Set(Object.keys(ctx.powerUserSettings.personas)),
                 timestamp: Date.now(),
             };
@@ -2042,6 +2439,7 @@ jQuery(async () => {
                     }
                     applyFiltersAndRender();
                     renderFilterArea();
+                    updateViewModeInfo();
                     if (currentPersonaAvatar) renderTagEditor(currentPersonaAvatar);
                     const search = $('#persona_search_bar').val() || '';
                     if (scrollToRestore && search === lastSearch) {
@@ -2095,6 +2493,9 @@ jQuery(async () => {
                 }
                 if (!$('#persona-tags-view-mode').length) {
                     injectViewModeToggle();
+                }
+                if (!$('#persona-quick-scroll').length) {
+                    injectQuickScrollControls();
                 }
                 renderFilterArea();
                 updateViewModeInfo();
